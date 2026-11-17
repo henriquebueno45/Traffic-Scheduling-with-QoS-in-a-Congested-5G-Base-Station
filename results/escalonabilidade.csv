@@ -1,0 +1,6 @@
+load,U,LL_bound_voice_video,U_voice_video,R_voice_ms,R_video_ms,prio_voice_video_ok,prio_all_ok,edf_all_ok
+1.5,0.964,0.828,0.664,6.0,18.0,True,True,True
+1.6,1.028,0.828,0.708,6.4,19.2,True,False,False
+2.0,1.285,0.828,0.885,8.0,32.0,True,False,False
+2.2,1.413,0.828,0.973,8.8,35.2,True,False,False
+2.4,1.542,0.828,1.062,9.6,inf,False,False,False
