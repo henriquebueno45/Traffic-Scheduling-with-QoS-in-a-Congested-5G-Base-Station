@@ -1,2 +1,0 @@
-variant,minflt,majflt
-sem mlockall,1402.0,0.0

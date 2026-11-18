@@ -268,7 +268,7 @@ dwrr load=2.0 seed=27
 dwrr load=2.0 seed=28
 dwrr load=2.0 seed=29
 dwrr load=2.0 seed=30
-salvo em results/sh6n30_ray1_*.csv e results/sh6n30_ray1_qos.png
+saved to results/sh6n30_ray1_*.csv and results/sh6n30_ray1_qos.png
 fifo load=1.2 seed=1
 fifo load=1.2 seed=2
 fifo load=1.2 seed=3
@@ -539,5 +539,5 @@ dwrr load=2.0 seed=27
 dwrr load=2.0 seed=28
 dwrr load=2.0 seed=29
 dwrr load=2.0 seed=30
-salvo em results/sh6n30_ray4_*.csv e results/sh6n30_ray4_qos.png
+saved to results/sh6n30_ray4_*.csv and results/sh6n30_ray4_qos.png
 done

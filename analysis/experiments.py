@@ -1,18 +1,17 @@
-"""Executa os experimentos E1..E5 do protocolo (results/EXPERIMENTOS.md).
+"""Run experiments E1 through E5 from the protocol (results/EXPERIMENTS.md).
 
-    E1  capacidade sob SLA: canal (fixo, Rayleigh L=1/2/4 com MESMA média) x política x carga   (H1, H2)
-    E2  piso mínimo (prio_floor) em sobrecarga                                                    (H3)
-    E3  rajadas escalonadas (--stagger K)                                                         (H4)
-    E4  viés de truncamento: 4 s sem trim x 20 s com warm-up/tail                                 (H6)
-    E5  velocidade (tempo de coerência) x prazo, Rayleigh L=1                                     (H5)
+    E1  SLA capacity: fixed/Rayleigh L=1/2/4 channels with equal mean x policy x load  (H1, H2)
+    E2  minimum floor (prio_floor) under overload                                   (H3)
+    E3  staggered bursts (--stagger K)                                              (H4)
+    E4  truncation bias: 4 s without trim x 20 s with warm-up/tail                 (H6)
+    E5  coherence-time speed x deadline, Rayleigh L=1                              (H5)
 
-Cada execução do núcleo é independente; rodamos N em paralelo, cada uma fixada em uma CPU diferente
-(escolha CPUs de núcleos físicos distintos: `lscpu -e`). A saída é incremental e retomável
-(se interrompido, rode o mesmo comando e as execuções já feitas são puladas).
+Each core execution is independent and runs on a separate CPU. Choose CPUs from distinct
+physical cores (`lscpu -e`). Output is incremental and resumable.
 
-Exemplo:
+Example:
     python -m analysis.experiments run E1 E2 E3 E4 E5 --cpus 1 2 3
-    python -m analysis.experiments run E1 --seeds 2 --cpus 1 2 3 --tag pilot     # teste rápido
+    python -m analysis.experiments run E1 --seeds 2 --cpus 1 2 3 --tag pilot  # quick test
 """
 from __future__ import annotations
 
@@ -42,11 +41,11 @@ OUT = ROOT / "results" / "exp"
 WARMUP_S, TAIL_S = 1.0, 0.5
 TARGET_MEAN_PRBS = 50.0
 POLICIES = ["fifo", "prio", "edf", "dwrr", "prio_floor"]
-FLOOR_DATA_DEFAULT = 2  # piso usado quando prio_floor aparece em E1
+FLOOR_DATA_DEFAULT = 2  # Floor used when prio_floor appears in E1
 
 
 def equal_mean_distance(antennas: int, target: float = TARGET_MEAN_PRBS) -> float:
-    """Distância (m) em que a média teórica de PRBs com MRC de `antennas` ramos é `target`."""
+    """Return the distance (m) where theoretical mean PRBs with MRC and `antennas` branches equals `target`."""
     return float(brentq(lambda d: theory_prbs(d, antennas) - target, 20.0, 2000.0))
 
 
@@ -109,11 +108,11 @@ def build_jobs(exp: str, n_seeds: int | None) -> list[Job]:
     if exp == "E5":
         return _jobs("E5", [ray(1, v) for v in (0.3, 1.5, 5.0, 15.0, 30.0)], ["fifo", "prio"],
                      [1.3, 1.5], seeds(20), 10.0)
-    raise SystemExit(f"experimento desconhecido: {exp}")
+    raise SystemExit(f"unknown experiment: {exp}")
 
 
 def run_job(job: Job, cpu: int, workdir: Path) -> pd.DataFrame:
-    """Roda o núcleo uma vez e devolve as métricas (por classe, com e sem trim)."""
+    """Run the core once and return per-class metrics with and without trimming."""
     workdir.mkdir(parents=True, exist_ok=True)
     out = workdir / "run.csv"
     cmd = [str(BIN), "--policy", job.policy, "--load", str(job.load), "--seed", str(job.seed),
@@ -151,7 +150,7 @@ def sha256(path: Path) -> str:
 
 
 def write_manifest(tag: str, exps: list[str], cpus: list[int]) -> None:
-    """Registra tudo que é preciso para reproduzir/verificar a execução."""
+    """Record everything needed to reproduce and verify an execution."""
     means = {}
     for L in (1, 2, 4):
         d = equal_mean_distance(L)
@@ -173,7 +172,8 @@ def write_manifest(tag: str, exps: list[str], cpus: list[int]) -> None:
 
 
 def cmd_run(a: argparse.Namespace) -> None:
-    os.sched_setaffinity(0, {0, 4})  # processo Python fora das CPUs de medição
+    if hasattr(os, "sched_setaffinity"):
+        os.sched_setaffinity(0, {0, 4})  # Keep the Python process away from measurement CPUs
     tag = a.tag or "_".join(a.exps)
     write_manifest(tag, a.exps, a.cpus)
     for exp in a.exps:
@@ -181,7 +181,7 @@ def cmd_run(a: argparse.Namespace) -> None:
         csv = OUT / f"{exp}{'_' + a.tag if a.tag else ''}_raw.csv"
         done = set(pd.read_csv(csv, usecols=["job_key"])["job_key"]) if csv.exists() else set()
         todo = [j for j in jobs if j.key() not in done]
-        print(f"{exp}: {len(jobs)} execuções, {len(todo)} pendentes", flush=True)
+        print(f"{exp}: {len(jobs)} executions, {len(todo)} pending", flush=True)
         if a.dry:
             continue
         cpus: queue.Queue[int] = queue.Queue()
@@ -203,7 +203,7 @@ def cmd_run(a: argparse.Namespace) -> None:
                 if i % 25 == 0 or i == len(futs):
                     el = time.time() - t0
                     print(f"  {exp} {i}/{len(futs)}  {el / 60:.1f} min, "
-                          f"faltam ~{el / i * (len(futs) - i) / 60:.1f} min", flush=True)
+                          f"remaining ~{el / i * (len(futs) - i) / 60:.1f} min", flush=True)
 
 
 def main() -> None:
@@ -212,9 +212,9 @@ def main() -> None:
     r = sub.add_parser("run")
     r.add_argument("exps", nargs="+", choices=["E1", "E2", "E3", "E4", "E5"])
     r.add_argument("--cpus", nargs="+", type=int, default=[1, 2, 3])
-    r.add_argument("--seeds", type=int, default=None, help="sobrescreve nº de sementes (piloto)")
-    r.add_argument("--tag", default="", help="sufixo dos arquivos (ex.: pilot)")
-    r.add_argument("--dry", action="store_true", help="só conta as execuções")
+    r.add_argument("--seeds", type=int, default=None, help="override seed count (pilot)")
+    r.add_argument("--tag", default="", help="output filename suffix (for example: pilot)")
+    r.add_argument("--dry", action="store_true", help="count executions only")
     r.set_defaults(fn=cmd_run)
     a = ap.parse_args()
     a.fn(a)

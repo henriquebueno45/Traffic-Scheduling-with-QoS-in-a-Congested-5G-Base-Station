@@ -1,16 +1,16 @@
-"""Modelo de canal -> traço de PRBs por slot (CSV "slot,prbs").
+"""Channel model -> per-slot PRB trace (CSV "slot,prbs").
 
-Cadeia de cálculo (tudo em dB, exceto onde indicado):
-    PL(d)   = PL(d0) + 10 n log10(d/d0)            [log-distância]
-    X       ~ N(0, sigma^2)                         [shadowing log-normal, 1 sorteio por traço]
-    g(t)    = soma de L fadings Rayleigh |h_l(t)|^2 [Jakes; L = nº de antenas, MRC]
-    SNR(t)  = Ptx_prb - PL - X - ruído + 10 log10 g(t)
+Calculation chain (all values in dB except where noted):
+    PL(d)   = PL(d0) + 10 n log10(d/d0)            [log-distance]
+    X       ~ N(0, sigma^2)                         [log-normal shadowing, one draw per trace]
+    g(t)    = sum of L Rayleigh fading gains |h_l(t)|^2 [Jakes; L = antenna count, MRC]
+    SNR(t)  = Ptx_prb - PL - X - noise + 10 log10 g(t)
     SE(t)   = min(log2(1 + SNR_lin), SE_MAX)        [Shannon, bit/s/Hz]
-    PRBs(t) = round(N_NOMINAL * SE(t) / SE_REF)     [conversão para o orçamento do slot]
+    PRBs(t) = round(N_NOMINAL * SE(t) / SE_REF)     [slot-budget conversion]
 
-N_NOMINAL PRBs por slot correspondem a SE_REF bit/s/Hz (referência do canal fixo).
-Refs.: Goldsmith, "Wireless Communications" (path loss, shadowing, Jakes);
-Tse & Viswanath, cap. 3 (Rayleigh, MRC).
+N_NOMINAL PRBs per slot correspond to SE_REF bit/s/Hz (fixed-channel reference).
+References: Goldsmith, "Wireless Communications" (path loss, shadowing, Jakes);
+Tse & Viswanath, chapter 3 (Rayleigh, MRC).
 """
 from __future__ import annotations
 
@@ -28,20 +28,20 @@ class ChannelConfig:
     fc_hz: float = 3.5e9
     path_loss_exp: float = 3.5
     shadow_sigma_db: float = 6.0
-    ptx_prb_dbm: float = 23.0  # potência por PRB
-    prb_bw_hz: float = 360e3  # 12 subportadoras x 30 kHz
+    ptx_prb_dbm: float = 23.0  # Transmit power per PRB
+    prb_bw_hz: float = 360e3  # 12 subcarriers x 30 kHz
     noise_figure_db: float = 7.0
-    speed_mps: float = 1.5  # ~ pedestre
+    speed_mps: float = 1.5  # Approximately pedestrian speed
     antennas: int = 1  # MRC
     fading: bool = True
     slot_s: float = 1e-3
     n_nominal_prbs: int = 50
     se_ref: float = 4.0  # bit/s/Hz <-> n_nominal_prbs
-    se_max: float = 7.4  # limite do MCS (256QAM)
+    se_max: float = 7.4  # MCS limit (256QAM)
 
 
 def path_loss_db(d_m: float, cfg: ChannelConfig, d0_m: float = 1.0) -> float:
-    """Log-distância com PL(d0) de espaço livre."""
+    """Log-distance path loss using free-space PL(d0)."""
     pl0 = 20 * np.log10(4 * np.pi * d0_m * cfg.fc_hz / C)
     return float(pl0 + 10 * cfg.path_loss_exp * np.log10(d_m / d0_m))
 
@@ -53,10 +53,10 @@ def noise_dbm(cfg: ChannelConfig) -> float:
 def rayleigh_power_gain(
     n_slots: int, cfg: ChannelConfig, rng: np.random.Generator, n_paths: int = 32
 ) -> np.ndarray:
-    """|h|^2 com correlação temporal (Jakes/Clarke, soma de senoides).
+    """|h|^2 with temporal correlation (Jakes/Clarke, sum of sinusoids).
 
-    Média 1 por antena; com MRC de L antenas independentes soma L ganhos
-    (média L). Doppler máximo fd = v fc / c.
+    Mean gain is 1 per antenna. MRC with L independent antennas sums L gains
+    (mean L). Maximum Doppler is fd = v fc / c.
     """
     fd = cfg.speed_mps * cfg.fc_hz / C
     t = np.arange(n_slots) * cfg.slot_s
@@ -71,7 +71,7 @@ def rayleigh_power_gain(
 
 
 def generate_prbs(n_slots: int, cfg: ChannelConfig, seed: int = 1) -> np.ndarray:
-    """Devolve o nº de PRBs disponíveis em cada slot (inteiros >= 0)."""
+    """Return the number of PRBs available in each slot (integers >= 0)."""
     rng = np.random.default_rng(seed)
     shadow = rng.normal(0.0, cfg.shadow_sigma_db)
     snr_db = (
@@ -86,9 +86,9 @@ def generate_prbs(n_slots: int, cfg: ChannelConfig, seed: int = 1) -> np.ndarray
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--distance", type=float, default=100.0, help="metros")
-    ap.add_argument("--antennas", type=int, default=1, help="MRC: 1, 2 ou 4")
-    ap.add_argument("--no-fading", action="store_true", help="só path loss + shadowing")
+    ap.add_argument("--distance", type=float, default=100.0, help="meters")
+    ap.add_argument("--antennas", type=int, default=1, help="MRC: 1, 2, or 4")
+    ap.add_argument("--no-fading", action="store_true", help="only path loss + shadowing")
     ap.add_argument("--speed", type=float, default=1.5, help="m/s")
     ap.add_argument("--slots", type=int, default=10000)
     ap.add_argument("--seed", type=int, default=1)
@@ -106,7 +106,7 @@ def main() -> None:
     with open(a.out, "w") as f:
         f.write("slot,prbs\n")
         f.writelines(f"{i},{p}\n" for i, p in enumerate(prbs))
-    print(f"{a.out}: {a.slots} slots, PRBs média={prbs.mean():.1f} "
+    print(f"{a.out}: {a.slots} slots, mean PRBs={prbs.mean():.1f} "
           f"min={prbs.min()} max={prbs.max()}")
 
 

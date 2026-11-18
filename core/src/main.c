@@ -1,7 +1,7 @@
 /*
- * main.c - CLI, criação das threads e escrita dos logs.
+ * main.c - CLI, thread creation, and log output.
  *
- * Uso: ./build/gnb_sim --policy prio --load 1.5 --duration 10 --seed 1 \
+ * usage: ./build/gnb_sim --policy prio --load 1.5 --duration 10 --seed 1 \
  *                      --out ../results/run.csv [--trace t.csv] [--cpu 2]
  */
 #define _GNU_SOURCE
@@ -23,28 +23,28 @@ sim_t G;
 
 static void usage(const char *p) {
     fprintf(stderr,
-            "Uso: %s [opções]\n"
-            "  --policy fifo|prio|edf|dwrr|prio_floor  política (padrão prio)\n"
-            "  --floor-video N           prio_floor: PRB/slot garantidos ao vídeo (padrão 0)\n"
-            "  --floor-data N            prio_floor: PRB/slot garantidos aos dados (padrão 0)\n"
-            "  --stagger K               divide cada rajada de voz/vídeo em K sub-rajadas (padrão 1)\n"
-            "  --load X                  multiplicador de carga (padrão 1.0)\n"
-            "  --duration S              duração em segundos (padrão 10)\n"
-            "  --seed N                  semente (padrão 1)\n"
-            "  --prbs N                  PRBs por slot, canal fixo (padrão 50)\n"
-            "  --slot-us N               duração do slot em us (padrão 1000)\n"
-            "  --trace FILE              traço de canal CSV slot,prbs\n"
-            "  --out FILE                CSV de pacotes (padrão results/run.csv)\n"
-            "  --cpu N                   fixa tudo na CPU N (padrão: não fixa)\n"
-            "  --no-rt                   não usa SCHED_FIFO\n"
-            "  --no-mlock                não trava a memória (padrão: mlockall)\n"
-            "  --prio-inherit            mutex com PTHREAD_PRIO_INHERIT\n"
-            "  --inversion               liga o experimento de inversão de prioridade\n"
-            "                            (exige --cpu e SCHED_FIFO)\n"
-            "  --cs-us N                 seção crítica da contabilidade, us (padrão 2000)\n"
-            "  --hog-ms X                CPU do hog por ciclo de 100 ms (padrão 20; 0 = sem hog)\n"
-            "  --max-packets N           capacidade do log (padrão 2000000)\n"
-            "  --quiet                   sem saída do monitor\n",
+            "Usage: %s [options]\n"
+            "  --policy fifo|prio|edf|dwrr|prio_floor  policy (default prio)\n"
+            "  --floor-video N           prio_floor: PRBs/slot guaranteed for video (default 0)\n"
+            "  --floor-data N            prio_floor: PRBs/slot guaranteed for data (default 0)\n"
+            "  --stagger K               divide each voice/video burst into K sub-bursts (default 1)\n"
+            "  --load X                  load multiplier (default 1.0)\n"
+            "  --duration S              duration in seconds (default 10)\n"
+            "  --seed N                  seed (default 1)\n"
+            "  --prbs N                  PRBs per slot, fixed channel (default 50)\n"
+            "  --slot-us N               slot duration in us (default 1000)\n"
+            "  --trace FILE              channel trace CSV: slot,prbs\n"
+            "  --out FILE                packet CSV (default results/run.csv)\n"
+            "  --cpu N                   pin everything to CPU N (default: do not pin)\n"
+            "  --no-rt                   do not use SCHED_FIFO\n"
+            "  --no-mlock                do not lock memory (default: mlockall)\n"
+            "  --prio-inherit            mutex with PTHREAD_PRIO_INHERIT\n"
+            "  --inversion               enable the priority-inversion experiment\n"
+            "                            (requires --cpu and SCHED_FIFO)\n"
+            "  --cs-us N                 accounting critical section, us (default 2000)\n"
+            "  --hog-ms X                hog CPU time per 100-ms cycle (default 20; 0 = no hog)\n"
+            "  --max-packets N           log capacity (default 2000000)\n"
+            "  --quiet                   suppress monitor output\n",
             p);
 }
 
@@ -91,7 +91,7 @@ static void parse_args(config_t *c, int argc, char **argv) {
     }
 }
 
-/* mkdir -p do diretório pai de `path` (um nível basta para results/). */
+/* Create the parent directory for path (works for results/ and similar paths). */
 static void ensure_parent_dir(const char *path) {
     char dir[512];
     strncpy(dir, path, sizeof dir - 1);
@@ -103,7 +103,7 @@ static void ensure_parent_dir(const char *path) {
     }
 }
 
-/* Cria thread; tenta SCHED_FIFO e, se não puder, avisa e cria normal. */
+/* Create a thread; try SCHED_FIFO and fall back to the normal scheduler if unavailable. */
 static void spawn(pthread_t *t, void *(*fn)(void *), void *arg, int prio) {
     if (G.cfg.use_rt) {
         pthread_attr_t a;
@@ -115,7 +115,7 @@ static void spawn(pthread_t *t, void *(*fn)(void *), void *arg, int prio) {
         int r = pthread_create(t, &a, fn, arg);
         pthread_attr_destroy(&a);
         if (r == 0) return;
-        fprintf(stderr, "aviso: SCHED_FIFO prio %d falhou (%s); usando padrão\n",
+        fprintf(stderr, "warning: SCHED_FIFO priority %d failed (%s); using default\n",
                 prio, strerror(r));
         G.cfg.use_rt = 0;
     }
@@ -140,7 +140,7 @@ static void write_packet_log(const sim_t *s) {
     fclose(f);
 }
 
-/* <out>.slots.csv: uma linha por slot (latência de escalonamento). */
+/* <out>.slots.csv: one line per slot (scheduling latency). */
 static void write_slot_log(const sim_t *s) {
     char path[600];
     snprintf(path, sizeof path, "%s.slots.csv", s->cfg.out);
@@ -154,10 +154,10 @@ static void write_slot_log(const sim_t *s) {
     fclose(f);
 }
 
-/* <out>.starvation.csv: starvation por classe.
- *   backlog_slots = slots com fila não vazia
- *   starved_slots = desses, quantos a classe recebeu 0 PRB
- *   max_starve_ms = maior espera seguida sem receber nenhum PRB */
+/* <out>.starvation.csv: starvation by class.
+ *   backlog_slots = slots with a non-empty queue
+ *   starved_slots = of those, slots where the class received 0 PRB
+ *   max_starve_ms = longest consecutive wait without receiving any PRB */
 static void write_starvation_log(const sim_t *s) {
     char path[600];
     snprintf(path, sizeof path, "%s.starvation.csv", s->cfg.out);
@@ -170,7 +170,7 @@ static void write_starvation_log(const sim_t *s) {
     fclose(f);
 }
 
-/* <out>.producers.csv: latência de despertar de cada produtora (acordou - ideal). */
+/* <out>.producers.csv: each producer wake latency (wakeup - ideal). */
 static void write_producer_log(const sim_t *s) {
     char path[600];
     snprintf(path, sizeof path, "%s.producers.csv", s->cfg.out);
@@ -187,20 +187,20 @@ static void write_producer_log(const sim_t *s) {
 int main(int argc, char **argv) {
     parse_args(&G.cfg, argc, argv);
     if (!policy_by_name(G.cfg.policy)) {
-        fprintf(stderr, "política desconhecida: %s\n", G.cfg.policy);
+        fprintf(stderr, "unknown policy: %s\n", G.cfg.policy);
         return 2;
     }
     if (G.cfg.trace && channel_load_trace(&G, G.cfg.trace) != 0) {
-        fprintf(stderr, "não consegui ler o traço %s\n", G.cfg.trace);
+        fprintf(stderr, "could not read the channel trace %s\n", G.cfg.trace);
         return 2;
     }
 
     if (G.cfg.inversion && (G.cfg.cpu < 0 || !G.cfg.use_rt)) {
-        fprintf(stderr, "--inversion exige --cpu N e SCHED_FIFO (sem --no-rt)\n");
+        fprintf(stderr, "--inversion requires --cpu N and SCHED_FIFO (without --no-rt)\n");
         return 2;
     }
 
-    if (G.cfg.cpu >= 0) { /* threads herdam a afinidade */
+    if (G.cfg.cpu >= 0) { /* Threads inherit the CPU affinity. */
         cpu_set_t set;
         CPU_ZERO(&set);
         CPU_SET(G.cfg.cpu, &set);
@@ -212,21 +212,21 @@ int main(int argc, char **argv) {
     if (G.cfg.prio_inherit)
         pthread_mutexattr_setprotocol(&ma, PTHREAD_PRIO_INHERIT);
     pthread_mutex_init(&G.lock, &ma);
-    sem_init(&G.sem_report, 0, 0); /* contador começa em 0: monitora espera */
+    sem_init(&G.sem_report, 0, 0); /* Counter starts at 0: monitor waits */
 
-    /* Trava toda a memória (atual e futura) na RAM: sem page fault nem swap durante a
-     * medição. Vem ANTES dos calloc para que os buffers já nasçam travados.
-     * Exige RLIMIT_MEMLOCK alto (pilhas de thread de 8 MB e logs também são travados). */
+    /* Lock all current and future memory in RAM to avoid page faults and swapping during
+     * measurement. This runs before calloc so the buffers are already locked.
+     * It requires a sufficiently high RLIMIT_MEMLOCK (8-MB thread stacks and logs are also locked). */
     struct rlimit rl;
     if (G.cfg.use_mlock && (getrlimit(RLIMIT_MEMLOCK, &rl) != 0 ||
                             (rl.rlim_cur != RLIM_INFINITY && rl.rlim_cur < (rlim_t)512 << 20))) {
         if (!G.cfg.quiet)
-            fprintf(stderr, "AVISO: memlock baixo; rodando sem mlockall "
-                            "(adicione '@wheel - memlock unlimited' em /etc/security/limits.d/99-rt.conf)\n");
+            fprintf(stderr, "warning: memlock limit is too low; running without mlockall "
+                            "(add '@wheel - memlock unlimited' to /etc/security/limits.d/99-rt.conf)\n");
         G.cfg.use_mlock = 0;
     }
     if (G.cfg.use_mlock && mlockall(MCL_CURRENT | MCL_FUTURE) != 0) {
-        perror("AVISO: mlockall");
+        perror("warning: mlockall");
         G.cfg.use_mlock = 0;
     }
 
@@ -239,7 +239,7 @@ int main(int argc, char **argv) {
         if (!G.wake[c]) { perror("calloc"); return 1; }
     }
 
-    G.t0_ns = now_ns() + 100 * NS_PER_MS; /* folga para criar as threads */
+    G.t0_ns = now_ns() + 100 * NS_PER_MS; /* Leave startup headroom for thread creation */
     G.end_ns = G.t0_ns + (int64_t)(G.cfg.duration_s * 1e9);
 
     pthread_t tp[NCLASSES], ts, tm, tacc, thog;
@@ -262,9 +262,9 @@ int main(int argc, char **argv) {
     write_starvation_log(&G);
     write_producer_log(&G);
     if (!G.cfg.quiet)
-        fprintf(stderr, "ok: %d pacotes, %d slots -> %s (rt=%d)\n", G.npkts,
+        fprintf(stderr, "ok: %d packets, %d slots -> %s (rt=%d)\n", G.npkts,
                 G.nslots, G.cfg.out, G.cfg.use_rt);
     if (G.npkts >= G.cfg.max_packets)
-        fprintf(stderr, "AVISO: log cheio (--max-packets); resultado truncado\n");
+        fprintf(stderr, "warning: log full (--max-packets); result truncated\n");
     return 0;
 }

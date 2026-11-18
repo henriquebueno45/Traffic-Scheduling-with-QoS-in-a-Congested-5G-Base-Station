@@ -1,9 +1,9 @@
-"""Varredura automática: políticas x cargas x sementes -> CSV + gráfico.
+"""Automatic sweep: policies x loads x seeds -> CSV + plot.
 
-Roda o núcleo em sequência (NÃO em paralelo: mediria uma CPU disputada),
-resume cada execução e agrega média e IC 95% (bootstrap) entre sementes.
+Run the core sequentially (not in parallel, because that would contend for a CPU),
+summarize each execution, and aggregate means with 95% bootstrap confidence intervals.
 
-Exemplo:
+Example:
     python -m analysis.sweep --loads 0.5 1 1.5 2 2.5 --seeds 5 --duration 5
 """
 from __future__ import annotations
@@ -23,10 +23,10 @@ METRICS = ["qos", "delivery_rate", "delay_p95_ms", "delay_mean_ms", "max_starve_
 
 def make_trace(tag: str, seed: int, duration: float, distance: float, antennas: int,
                shadow_sigma_db: float = 0.0) -> str:
-    """Gera um traço Rayleigh novo por semente (realizações independentes).
+    """Generate a new Rayleigh trace per seed (independent realizations).
 
-    shadow_sigma_db=0 isola o efeito do desvanecimento rápido; com sigma > 0 o
-    sombreamento (1 sorteio por traço) domina a variância entre sementes.
+    shadow_sigma_db=0 isolates the fast-fading effect. When sigma > 0,
+    shadowing (one draw per trace) dominates variance across seeds.
     """
     from channel.channel_model import ChannelConfig, generate_prbs
 
@@ -53,7 +53,7 @@ def run_once(policy: str, load: float, seed: int, duration: float, trace, cpu) -
 
 
 def bootstrap_ci(x: pd.Series, n_boot: int = 2000, seed: int = 0) -> tuple[float, float]:
-    """IC 95% percentil por bootstrap da média (respeita limites como [0, 1])."""
+    """95% percentile bootstrap confidence interval for the mean (respects [0, 1] bounds)."""
     v = x.to_numpy(dtype=float)
     v = v[~np.isnan(v)]
     if len(v) < 2:
@@ -65,7 +65,7 @@ def bootstrap_ci(x: pd.Series, n_boot: int = 2000, seed: int = 0) -> tuple[float
 
 
 def aggregate(raw: pd.DataFrame) -> pd.DataFrame:
-    """Média e IC 95% (bootstrap) entre sementes por (política, carga, classe)."""
+    """Mean and 95% bootstrap confidence interval across seeds by (policy, load, class)."""
     rows = []
     for (pol, load, cls), g in raw.groupby(["policy", "load", "class"]):
         row = {"policy": pol, "load": load, "class": cls, "n": len(g)}
@@ -89,7 +89,7 @@ def plot(agg: pd.DataFrame, path: Path, metric: str = "qos") -> None:
             ax.errorbar(g["load"], m, yerr=[m - g[f"{metric}_lo"], g[f"{metric}_hi"] - m],
                         marker="o", capsize=3, label=pol)
         ax.set_title(cls)
-        ax.set_xlabel("carga (x carga base)")
+        ax.set_xlabel("load (x baseline load)")
         ax.grid(alpha=0.3)
     axes[0].set_ylabel(metric)
     axes[0].legend()
@@ -101,16 +101,16 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--policies", nargs="+", default=["fifo", "prio", "edf", "dwrr"])
     ap.add_argument("--loads", nargs="+", type=float, default=[0.5, 1, 1.5, 2, 2.5])
-    ap.add_argument("--seeds", type=int, default=5, help="repetições por ponto")
+    ap.add_argument("--seeds", type=int, default=5, help="repetitions per point")
     ap.add_argument("--duration", type=float, default=5.0)
-    ap.add_argument("--trace", default=None, help="traço de canal fixo (CSV)")
+    ap.add_argument("--trace", default=None, help="fixed channel trace (CSV)")
     ap.add_argument("--rayleigh", action="store_true",
-                    help="gera um traço Rayleigh por semente (usa --distance/--antennas)")
-    ap.add_argument("--distance", type=float, default=160.0, help="m (com --rayleigh)")
-    ap.add_argument("--shadow-sigma", type=float, default=0.0, help="dB (com --rayleigh)")
-    ap.add_argument("--antennas", type=int, default=1, help="MRC (com --rayleigh)")
+                    help="generate a Rayleigh trace per seed (uses --distance/--antennas)")
+    ap.add_argument("--distance", type=float, default=160.0, help="m (with --rayleigh)")
+    ap.add_argument("--shadow-sigma", type=float, default=0.0, help="dB (with --rayleigh)")
+    ap.add_argument("--antennas", type=int, default=1, help="MRC (with --rayleigh)")
     ap.add_argument("--cpu", type=int, default=None)
-    ap.add_argument("--tag", default="sweep", help="prefixo dos arquivos de saída")
+    ap.add_argument("--tag", default="sweep", help="output-file prefix")
     a = ap.parse_args()
 
     rows = []
@@ -133,7 +133,7 @@ def main() -> None:
     raw.to_csv(res / f"{a.tag}_raw.csv", index=False)
     agg.to_csv(res / f"{a.tag}_agg.csv", index=False)
     plot(agg, res / f"{a.tag}_qos.png", "qos")
-    print(f"salvo em results/{a.tag}_*.csv e results/{a.tag}_qos.png")
+    print(f"saved to results/{a.tag}_*.csv and results/{a.tag}_qos.png")
 
 
 if __name__ == "__main__":

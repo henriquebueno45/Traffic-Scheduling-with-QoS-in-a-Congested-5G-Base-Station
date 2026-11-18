@@ -1,10 +1,10 @@
-"""Experimento de inversão de prioridade (Montez): sem hog, sem herança, com herança.
+"""Priority-inversion experiment (Montez): no hog, no inheritance, and inheritance.
 
-Fixa tudo em uma CPU com SCHED_FIFO; a escalonadora (prio 90) disputa o mutex com
-uma thread de contabilidade (prio 20) que o segura por --cs-us, enquanto um hog
-(prio 50) consome CPU. Veja o comentário em core/src/threads.c.
+Pin everything to one CPU with SCHED_FIFO; the scheduler (priority 90) competes for the mutex
+with an accounting thread (priority 20) that holds it for --cs-us, while a hog thread
+(priority 50) consumes CPU. See the comments in core/src/threads.c.
 
-Exemplo:
+Example:
     python -m analysis.inversion --seeds 5 --duration 10 --cpu 2
 """
 from __future__ import annotations
@@ -19,9 +19,9 @@ ROOT = Path(__file__).resolve().parent.parent
 BIN = ROOT / "core" / "build" / "gnb_sim"
 
 SCENARIOS = {
-    "baseline (sem hog)": ["--hog-ms", "0"],
-    "inversão (sem herança)": [],
-    "herança de prioridade": ["--prio-inherit"],
+    "baseline (no hog)": ["--hog-ms", "0"],
+    "inversion (no inheritance)": [],
+    "priority inheritance": ["--prio-inherit"],
 }
 
 
@@ -31,7 +31,7 @@ def run(extra: list[str], seed: int, a: argparse.Namespace) -> dict:
            "--duration", str(a.duration), "--cpu", str(a.cpu), "--inversion",
            "--cs-us", str(a.cs_us), "--hog-ms", str(a.hog_ms), "--quiet",
            "--out", str(out), *extra]
-    if "--hog-ms" in extra:  # o cenário baseline sobrescreve o valor padrão
+    if "--hog-ms" in extra: # The baseline scenario overrides the default hog value
         cmd = cmd[: cmd.index("--hog-ms")] + cmd[cmd.index("--hog-ms") + 2 :]
     subprocess.run(cmd, check=True)
 
@@ -57,7 +57,7 @@ def main() -> None:
     ap.add_argument("--load", type=float, default=1.0)
     ap.add_argument("--cs-us", type=int, default=2000)
     ap.add_argument("--hog-ms", type=float, default=20.0)
-    ap.add_argument("--tag", default="inversao")
+    ap.add_argument("--tag", default="priority_inversion")
     a = ap.parse_args()
 
     rows = []
@@ -83,17 +83,17 @@ def main() -> None:
     for ax, col, title in zip(
         axes,
         ["lock_wait_max_ms", "voice_delay_p99_ms", "voice_deadline_miss"],
-        ["Espera máx. da escalonadora pelo mutex (ms)", "Voz: atraso P99 (ms)",
-         "Voz: fração fora do prazo"],
+        ["Maximum scheduler mutex wait (ms)", "Voice: P99 delay (ms)",
+         "Voice: fraction missing deadline"],
     ):
         m = raw.groupby("scenario", sort=False)[col]
         ax.bar(range(3), m.mean(), yerr=m.std(), capsize=4, color=["#999", "#d62728", "#2ca02c"])
-        ax.set_xticks(range(3), ["baseline", "sem\nherança", "com\nherança"])
+        ax.set_xticks(range(3), ["baseline", "no\ninheritance", "with\ninheritance"])
         ax.set_title(title, fontsize=9)
         ax.grid(axis="y", alpha=0.3)
     fig.tight_layout()
     fig.savefig(res / f"{a.tag}.png", dpi=150)
-    print(f"salvo em results/{a.tag}_*.csv e results/{a.tag}.png")
+    print(f"saved to results/{a.tag}_*.csv and results/{a.tag}.png")
 
 
 if __name__ == "__main__":

@@ -1,8 +1,8 @@
 /*
- * policy.h - interface única para as políticas de escalonamento.
+ * policy.h - Common interface for the scheduling policies.
  *
- * Para criar uma política nova: implemente as 3 funções em policy.c e
- * registre-a na tabela POLICIES.
+ * To create a new policy, implement the three functions in policy.c and
+ * register it in the POLICIES table.
  */
 #ifndef POLICY_H
 #define POLICY_H
@@ -11,15 +11,15 @@
 
 typedef struct {
     const char *name;
-    /* chamada uma vez no início de cada slot (com o mutex travado) */
+    /* Called once at the start of each slot while holding the mutex. */
     void (*on_slot_start)(sim_t *s);
-    /* escolhe a classe a atender; devolve -1 se não há ninguém.
-     * *limit = máximo de PRBs que essa classe pode receber agora. */
+    /* Select the class to serve; return -1 if no packet is queued.
+     * *limit is the maximum PRBs that this class may receive now. */
     int (*pick)(sim_t *s, int *limit);
-    /* chamada após atender `prbs` PRBs da classe `cls` */
+    /* Called after serving `prbs` PRBs from class `cls`. */
     void (*on_served)(sim_t *s, int cls, int prbs);
 } policy_t;
 
-const policy_t *policy_by_name(const char *name); /* NULL se não existe */
+const policy_t *policy_by_name(const char *name); /* NULL if it does not exist */
 
 #endif

@@ -1,13 +1,13 @@
 /*
- * policy.c - políticas de escalonamento: fifo, prio, dwrr.
- * Todas rodam com o mutex da simulação travado.
+ * policy.c - Scheduling policies: fifo, prio, edf, dwrr, and prio_floor.
+ * All policies run while the simulation mutex is held.
  */
 #include "policy.h"
 
 #include <limits.h>
 #include <string.h>
 
-/* ---------- FIFO: atende o pacote mais antigo entre todas as filas ---------- */
+/* ---------- FIFO: serve the oldest packet across all queues ---------- */
 static int fifo_pick(sim_t *s, int *limit) {
     int best = -1;
     int64_t best_arrival = INT64_MAX;
@@ -23,12 +23,12 @@ static int fifo_pick(sim_t *s, int *limit) {
     return best;
 }
 
-/* ---------- EDF (Earliest Deadline First): prazo mais próximo primeiro ----------
- * Igual ao FIFO, mas compara o PRAZO ABSOLUTO (chegada + prazo da classe) em vez
- * da chegada. Dentro de cada classe os prazos crescem com a chegada, então basta
- * olhar o primeiro pacote de cada fila. Voz (prazo 20 ms) tende a ir na frente,
- * mas um pacote de dados muito antigo acaba ganhando de voz recém-chegada
- * (prazo dele fica mais próximo), o que evita starvation. */
+/* ---------- EDF (Earliest Deadline First): closest deadline first ----------
+ * Unlike FIFO, EDF compares the absolute deadline (arrival plus class deadline).
+ * Within each class, deadlines grow with arrival, so only the first packet in
+ * each queue needs to be considered. Voice (20 ms deadline) tends to remain first,
+ * but a very old data packet can outrank a newly arrived voice packet, which helps
+ * prevent starvation. */
 static int edf_pick(sim_t *s, int *limit) {
     int best = -1;
     int64_t best_deadline = INT64_MAX;
@@ -44,7 +44,7 @@ static int edf_pick(sim_t *s, int *limit) {
     return best;
 }
 
-/* ---------- Prioridade estrita: voz > vídeo > dados ---------- */
+/* ---------- Strict priority: voice > video > data ---------- */
 static int prio_pick(sim_t *s, int *limit) {
     *limit = INT_MAX;
     for (int c = 0; c < NCLASSES; c++)
@@ -52,31 +52,31 @@ static int prio_pick(sim_t *s, int *limit) {
     return -1;
 }
 
-/* ---------- DWRR: cada classe ganha um "quantum" de PRBs por slot ----------
- * Pesos 4:4:2 sobre 50 PRBs => voz 20, vídeo 20, dados 10 (por slot).
- * A classe só pode usar seu crédito (deficit); se sobrar orçamento e todos
- * os créditos acabaram, atende quem tiver fila (conserva trabalho).
+/* ---------- DWRR: each class receives a PRB quantum per slot ----------
+ * Weights 4:4:2 over 50 PRBs give voice 20, video 20, and data 10 per slot.
+ * A class may use only its deficit credit. If budget remains after all credits
+ * are exhausted, serve any queued class to conserve work.
  */
 static const int DWRR_QUANTUM[NCLASSES] = {20, 20, 10};
 
 static void dwrr_slot_start(sim_t *s) {
     for (int c = 0; c < NCLASSES; c++) {
         if (q_empty(&s->q[c]))
-            s->deficit[c] = 0; /* sem fila, sem crédito acumulado */
+            s->deficit[c] = 0; /* No queue: discard accumulated credit. */
         else
             s->deficit[c] += DWRR_QUANTUM[c];
     }
 }
 
 static int dwrr_pick(sim_t *s, int *limit) {
-    for (int i = 0; i < NCLASSES; i++) { /* 1ª passada: quem tem crédito */
+    for (int i = 0; i < NCLASSES; i++) { /* First pass: classes with credit */
         int c = (s->rr_next + i) % NCLASSES;
         if (!q_empty(&s->q[c]) && s->deficit[c] > 0) {
             *limit = s->deficit[c];
             return c;
         }
     }
-    for (int i = 0; i < NCLASSES; i++) { /* 2ª passada: conserva trabalho */
+    for (int i = 0; i < NCLASSES; i++) { /* Second pass: use the remaining budget. */
         int c = (s->rr_next + i) % NCLASSES;
         if (!q_empty(&s->q[c])) {
             *limit = INT_MAX;
@@ -96,11 +96,11 @@ static void noop_served(sim_t *s, int cls, int prbs) {
     (void)s; (void)cls; (void)prbs;
 }
 
-/* ---------- Prioridade estrita com PISO (prio_floor) ----------
- * Igual à prio, mas vídeo e dados têm um mínimo garantido de PRBs POR SLOT
- * (--floor-video, --floor-data), atendido ANTES da voz. Evita starvation ao custo
- * de tirar esses PRBs da voz. Reaproveita `deficit[]` como crédito do piso do slot.
- * Todo serviço recebido (inclusive o da fase de prioridade) consome o crédito. */
+/* ---------- Strict priority with a floor (prio_floor) ----------
+ * Similar to prio, but video and data receive a minimum PRB allocation per slot
+ * (--floor-video, --floor-data), served before voice. This prevents starvation
+ * at the cost of taking those PRBs from voice. `deficit[]` stores the slot floor;
+ * all service, including strict-priority service, consumes credit. */
 static void floor_slot_start(sim_t *s) {
     s->deficit[CLS_VOICE] = 0;
     s->deficit[CLS_VIDEO] = s->cfg.floor_video;
@@ -108,13 +108,13 @@ static void floor_slot_start(sim_t *s) {
 }
 
 static int floor_pick(sim_t *s, int *limit) {
-    for (int c = CLS_VIDEO; c < NCLASSES; c++) { /* fase 1: pisos */
+    for (int c = CLS_VIDEO; c < NCLASSES; c++) { /* Phase 1: serve the minimum floors. */
         if (!q_empty(&s->q[c]) && s->deficit[c] > 0) {
             *limit = s->deficit[c];
             return c;
         }
     }
-    return prio_pick(s, limit); /* fase 2: prioridade estrita */
+    return prio_pick(s, limit); /* Phase 2: strict priority */
 }
 
 static void floor_served(sim_t *s, int cls, int prbs) {

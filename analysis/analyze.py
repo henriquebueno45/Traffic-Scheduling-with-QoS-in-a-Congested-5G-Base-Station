@@ -1,13 +1,13 @@
-"""Métricas por classe a partir do CSV de pacotes do núcleo.
+"""Per-class metrics derived from the core packet CSV.
 
-Convenções:
-  - tempos em ns relativos ao início; -1 = nunca ocorreu.
-  - "entregue"   = end_ns >= 0
-  - "no prazo"   = entregue e end_ns <= deadline_ns
-  - pacotes descartados/não atendidos CONTAM no denominador (evita viés de
-    sobrevivência); o atraso médio/percentis usam só os entregues.
-  - QoS satisfaction = taxa de entrega x (1 - descumprimento de prazo)
-                     = no_prazo / ofertados.
+Conventions:
+  - Times are in ns relative to startup; -1 means the packet never occurred.
+  - "delivered" means end_ns >= 0.
+  - "on time" means delivered and end_ns <= deadline_ns.
+  - Dropped or unserved packets count in the denominator to avoid
+    survivor bias; mean delay and percentiles use delivered packets only.
+  - QoS satisfaction = delivery rate x (1 - deadline-miss rate)
+                     = on_time / offered.
 """
 from __future__ import annotations
 
@@ -20,19 +20,20 @@ CLASSES = ["voice", "video", "data"]
 
 
 def jain(x) -> float:
-    """Índice de Jain: (soma x)^2 / (n * soma x^2); 1 = perfeitamente justo."""
+    """Jain index: (sum x)^2 / (n * sum x^2); 1 means perfectly fair."""
     x = np.asarray(x, dtype=float)
     return float(x.sum() ** 2 / (len(x) * (x**2).sum())) if (x**2).sum() > 0 else 1.0
 
 
 def summarize(pk: pd.DataFrame, duration_s: float, warmup_s: float = 0.0,
               tail_s: float = 0.0) -> pd.DataFrame:
-    """Uma linha por classe com as métricas.
+    """One row per class containing its metrics.
 
-    warmup_s / tail_s: só contam pacotes que CHEGARAM em [warmup_s, duration_s - tail_s].
-    O warm-up evita o transitório inicial (filas vazias); o tail (>= maior prazo, 0,5 s)
-    garante que todo pacote contado teve tempo de ser atendido: se ainda está na fila
-    no fim, é descumprimento real e não artefato de truncar a simulação.
+    warmup_s / tail_s: count only packets that arrived within
+    [warmup_s, duration_s - tail_s]. Warm-up avoids the initial transient (empty queues);
+    the tail (at least the largest deadline, 0.5 s) ensures every counted packet had
+    time to be served. If it is still queued at the end, that is a real deadline miss,
+    not an artifact of truncating the simulation.
     """
     if warmup_s or tail_s:
         pk = pk[(pk["arrival_ns"] >= warmup_s * 1e9)
@@ -66,20 +67,20 @@ def summarize(pk: pd.DataFrame, duration_s: float, warmup_s: float = 0.0,
 
 
 def jain_over_classes(summary: pd.DataFrame) -> float:
-    """Justiça entre classes medida sobre a taxa de entrega."""
+    """Fairness between classes measured from their delivery rates."""
     return jain(summary["delivery_rate"].fillna(0))
 
 
 def scheduling_latency_us(slots: pd.DataFrame) -> pd.Series:
-    """Atraso do despertar da thread escalonadora (actual - ideal), em us."""
+    """Scheduler-thread wake delay (actual - ideal), in microseconds."""
     return (slots["actual_ns"] - slots["ideal_ns"]) / 1e3
 
 
 def load_starvation(csv_path: str) -> pd.DataFrame:
-    """Lê <csv>.starvation.csv do núcleo.
+    """Read <csv>.starvation.csv from the core.
 
-    starved_frac  = slots em que a classe tinha fila e recebeu 0 PRB / slots com fila
-    max_starve_ms = maior espera seguida sem receber nenhum PRB
+    starved_frac  = slots where the class had backlog and received 0 PRB / slots with backlog
+    max_starve_ms = longest consecutive wait without receiving any PRB
     """
     st = pd.read_csv(csv_path + ".starvation.csv")
     st["starved_frac"] = st["starved_slots"] / st["backlog_slots"].where(st["backlog_slots"] > 0)
@@ -87,21 +88,21 @@ def load_starvation(csv_path: str) -> pd.DataFrame:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Resumo de uma execução do núcleo")
-    ap.add_argument("csv", help="CSV de pacotes (ex.: results/run.csv)")
-    ap.add_argument("--duration", type=float, default=10.0, help="s (usado na vazão)")
+    ap = argparse.ArgumentParser(description="Summary of one core execution")
+    ap.add_argument("csv", help="Packet CSV (for example, results/run.csv)")
+    ap.add_argument("--duration", type=float, default=10.0, help="seconds (used for throughput)")
     a = ap.parse_args()
 
     pd.set_option("display.width", 200)
     s = summarize(pd.read_csv(a.csv), a.duration)
     print(s.round(3).to_string(index=False))
-    print(f"\nJain (taxa de entrega entre classes): {jain_over_classes(s):.3f}")
+    print(f"\nJain (delivery-rate fairness across classes): {jain_over_classes(s):.3f}")
     print("\nStarvation:")
     print(load_starvation(a.csv).round(3).to_string(index=False))
     try:
         lat = scheduling_latency_us(pd.read_csv(a.csv + ".slots.csv"))
-        print(f"Latência de escalonamento (us): média={lat.mean():.1f} "
-              f"P99={lat.quantile(0.99):.1f} máx={lat.max():.1f}")
+        print(f"Scheduler latency (us): mean={lat.mean():.1f} "
+              f"P99={lat.quantile(0.99):.1f} max={lat.max():.1f}")
     except FileNotFoundError:
         pass
 

@@ -318,4 +318,4 @@ dwrr load=2.4 seed=17
 dwrr load=2.4 seed=18
 dwrr load=2.4 seed=19
 dwrr load=2.4 seed=20
-salvo em results/edf_*.csv e results/edf_qos.png
+saved to results/edf_*.csv and results/edf_qos.png

@@ -1,10 +1,10 @@
 /*
- * threads.c - threads produtoras (uma por classe), escalonadora e monitora.
+ * threads.c - Producer threads (one per class), scheduler, and monitor.
  *
- * Prioridades SCHED_FIFO (Rate Monotonic: período menor => prioridade maior):
- *   escalonador (slot 1 ms) 90 > voz (20 ms) 80 > vídeo (33 ms) 70
- *   > dados (esporádica) 60 > hog 50 > contabilidade 20 > monitor 10
- * (hog e contabilidade só existem com --inversion; ver abaixo)
+ * SCHED_FIFO priorities (Rate Monotonic: shorter period => higher priority):
+ *   scheduler (1-ms slot) 90 > voice (20 ms) 80 > video (33 ms) 70
+ *   > data (sporadic) 60 > hog 50 > accounting 20 > monitor 10
+ * The hog and accounting threads exist only with --inversion; see below.
  */
 #include <errno.h>
 #include <limits.h>
@@ -19,10 +19,10 @@
 
 const char *const CLASS_NAME[NCLASSES] = {"voice", "video", "data"};
 
-/* Parâmetros do tráfego. Carga 1.0 = valores abaixo.
- * voz/vídeo: a cada `period_ns`, `base_pkts * load` pacotes chegam juntos
- *   (usuários transmitindo no mesmo instante: pior caso, simples).
- * dados: esporádica; intervalo médio exponencial = period_ns / load. */
+/* Traffic parameters. Load 1.0 uses the baseline values below.
+ * Voice/video: every `period_ns`, `base_pkts * load` packets arrive together
+ *   (all users transmit simultaneously: a simple worst case).
+ * Data: sporadic; mean exponential interval = period_ns / load. */
 typedef struct {
     int64_t period_ns;
     int base_pkts;
@@ -32,9 +32,9 @@ typedef struct {
 } class_cfg_t;
 
 static const class_cfg_t CLS[NCLASSES] = {
-    {20 * NS_PER_MS, 100, 2, 20 * NS_PER_MS, 80},  /* voz   */
-    {33 * NS_PER_MS, 40, 10, 50 * NS_PER_MS, 70},  /* vídeo */
-    {2 * NS_PER_MS, 1, 20, 500 * NS_PER_MS, 60},   /* dados */
+    {20 * NS_PER_MS, 100, 2, 20 * NS_PER_MS, 80},  /* voice   */
+    {33 * NS_PER_MS, 40, 10, 50 * NS_PER_MS, 70},  /* video */
+    {2 * NS_PER_MS, 1, 20, 500 * NS_PER_MS, 60},   /* data */
 };
 
 int class_rt_prio(int cls) { return CLS[cls].rt_prio; }
@@ -55,9 +55,9 @@ static void sleep_until(int64_t abs_ns) {
         ;
 }
 
-/* ===================== produtoras ===================== */
+/* ===================== producers ===================== */
 
-/* Cria `n` pacotes da classe `cls` de uma vez (um único lock). */
+/* Create `n` packets of class `cls` at once under the shared lock. */
 static void enqueue_burst(sim_t *s, int cls, int n) {
     int64_t t = now_ns() - s->t0_ns;
     pthread_mutex_lock(&s->lock);
@@ -83,12 +83,12 @@ void *producer_thread(void *arg) {
     sim_t *s = &G;
     unsigned seed = s->cfg.seed * 7919u + (unsigned)cls;
     int64_t next = s->t0_ns;
-    int k = 0; /* índice da sub-rajada dentro do período (voz/vídeo) */
+    int k = 0; /* Index of the sub-burst within the period (voice/video) */
 
     for (;;) {
         sleep_until(next);
         if (next >= s->end_ns) break;
-        if (s->nwake[cls] < MAX_WAKES) /* latência de despertar = agora - instante ideal */
+        if (s->nwake[cls] < MAX_WAKES) /* wake latency = now - ideal instant */
             s->wake[cls][s->nwake[cls]++] =
                 (wake_rec_t){next - s->t0_ns, now_ns() - next};
 
@@ -97,7 +97,7 @@ void *producer_thread(void *arg) {
             double u = (rand_r(&seed) + 1.0) / ((double)RAND_MAX + 2.0);
             next += (int64_t)(-log(u) * CLS[cls].period_ns / s->cfg.load);
         } else {
-            /* K sub-rajadas por período; n_k distribui o total sem perder pacotes */
+            /* K sub-bursts per period; n_k distributes the total without losing packets. */
             int K = s->cfg.stagger;
             int total = (int)(CLS[cls].base_pkts * s->cfg.load + 0.5);
             enqueue_burst(s, cls, total * (k + 1) / K - total * k / K);
@@ -108,7 +108,7 @@ void *producer_thread(void *arg) {
     return NULL;
 }
 
-/* ===================== escalonadora ===================== */
+/* ===================== scheduler ===================== */
 
 void *scheduler_thread(void *arg) {
     sim_t *s = arg;
@@ -122,13 +122,13 @@ void *scheduler_thread(void *arg) {
         int64_t woke = now_ns();
         int budget = channel_slot_prbs(s, slot);
         int total = budget;
-        int got[NCLASSES] = {0};     /* PRBs que cada classe recebeu neste slot */
-        int backlogged[NCLASSES];    /* a classe tinha pacote esperando? */
+        int got[NCLASSES] = {0};     /* PRBs each class received in this slot */
+        int backlogged[NCLASSES];    /* Did the class have a packet waiting? */
 
         int64_t t_try = now_ns();
         pthread_mutex_lock(&s->lock);
         int64_t t_got = now_ns();
-        int64_t slot_start = t_got - s->t0_ns; /* quando o slot é realmente processado */
+        int64_t slot_start = t_got - s->t0_ns; /* When the slot is actually processed */
         pol->on_slot_start(s);
         for (int c = 0; c < NCLASSES; c++) backlogged[c] = !q_empty(&s->q[c]);
 
@@ -147,13 +147,13 @@ void *scheduler_thread(void *arg) {
             got[c] += chunk;
             pol->on_served(s, c, chunk);
             if (p->remaining == 0) {
-                p->end_ns = slot_start + slot_ns; /* fim do slot */
+                p->end_ns = slot_start + slot_ns; /* End of the slot */
                 q_pop(&s->q[c]);
             }
         }
 
-        /* Starvation: fila não vazia e nenhum PRB recebido => slot "starved".
-         * Contamos a sequência atual e guardamos a maior. */
+        /* Starvation: queue non-empty and zero PRBs received => "starved" slot.
+         * Count the current run and retain the maximum. */
         for (int c = 0; c < NCLASSES; c++) {
             if (!backlogged[c]) { s->starve_run[c] = 0; continue; }
             s->backlog_slots[c]++;
@@ -170,17 +170,17 @@ void *scheduler_thread(void *arg) {
         s->nslots = (int)slot + 1;
         pthread_mutex_unlock(&s->lock);
 
-        /* A cada 1 s simulado, avisa a monitora pelo semáforo. */
+        /* Every 1 simulated second, notify the monitor through the semaphore. */
         if ((slot + 1) % slots_per_sec == 0) sem_post(&s->sem_report);
     }
-    s->monitor_stop = 1; /* o sem_post garante que a monitora enxergue isto */
+    s->monitor_stop = 1; /* sem_post ensures the monitor sees this update */
     sem_post(&s->sem_report);
     return NULL;
 }
 
-/* ===================== monitora ===================== */
+/* ===================== monitor ===================== */
 
-/* Dorme em sem_wait até a escalonadora liberar um relatório (sem polling de tempo). */
+/* Wait on sem_wait until the scheduler releases a report (without time polling). */
 void *monitor_thread(void *arg) {
     sim_t *s = arg;
     for (;;) {
@@ -188,7 +188,7 @@ void *monitor_thread(void *arg) {
         if (s->monitor_stop) break;
         if (s->cfg.quiet) continue;
         pthread_mutex_lock(&s->lock);
-        fprintf(stderr, "[monitor] t=%3.0fs filas v/V/d=%4d/%4d/%4d pacotes=%d\n",
+        fprintf(stderr, "[monitor] t=%3.0fs queues v/V/d=%4d/%4d/%4d packets=%d\n",
                 s->nslots * s->cfg.slot_us / 1e6, s->q[0].count, s->q[1].count,
                 s->q[2].count, s->npkts);
         pthread_mutex_unlock(&s->lock);
@@ -196,23 +196,22 @@ void *monitor_thread(void *arg) {
     return NULL;
 }
 
-/* ============ experimento de inversão de prioridade (--inversion) ============
+/* ============ priority-inversion experiment (--inversion) ============
  *
- * Cenário clássico, tudo fixado em UMA CPU (--cpu) com SCHED_FIFO:
- *   - contabilidade (prio 20) pega o mutex e fica `cs_us` us de CPU dentro dele
- *     (ex.: atualizar estatísticas globais);
- *   - hog (prio 50) acorda logo depois e consome `hog_ms` ms de CPU;
- *   - a escalonadora (prio 90) precisa do mutex no slot seguinte e bloqueia.
- * Sem herança: o hog preempta a contabilidade, que só termina depois dele =>
- *   a escalonadora espera ~hog_ms (inversão não limitada pela seção crítica).
- * Com PTHREAD_PRIO_INHERIT: a contabilidade herda prio 90, preempta o hog e
- *   libera o mutex em ~cs_us => espera limitada.
- * Fases (relativas a cada ciclo de 100 ms): contabilidade +300 us, hog +800 us,
- * e a escalonadora tenta o mutex em +1000 us.
+ * Classic scenario, all pinned to one CPU (--cpu) with SCHED_FIFO:
+ *   - accounting (priority 20) takes the mutex and spends `cs_us` CPU microseconds inside it;
+ *   - hog (priority 50) wakes immediately afterward and consumes `hog_ms` ms of CPU;
+ *   - the scheduler (priority 90) needs the mutex in the next slot and blocks.
+ * Without inheritance, the hog preempts accounting, so the scheduler waits about hog_ms
+ * and the inversion is not bounded by the accounting critical section.
+ * With PTHREAD_PRIO_INHERIT, accounting inherits priority 90, preempts the hog, and
+ * releases the mutex in about cs_us, so the wait is bounded.
+ * Phases relative to each 100-ms cycle: accounting +300 us, hog +800 us,
+ * and the scheduler attempts the mutex at +1000 us.
  */
 #define INV_PERIOD_NS (100 * NS_PER_MS)
 
-/* Consome tempo de CPU da própria thread (preempções não contam). */
+/* Consume CPU time on this thread (preemptions do not count). */
 static void burn_cpu_ns(int64_t ns) {
     struct timespec t;
     clock_gettime(CLOCK_THREAD_CPUTIME_ID, &t);

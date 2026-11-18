@@ -1,0 +1,2 @@
+variant,minflt,majflt
+Without mlockall,1402.0,0.0

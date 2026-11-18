@@ -1,0 +1,63 @@
+{
+  "tag": "wsl_20261117",
+  "experiments": [
+    "E1",
+    "E2",
+    "E3",
+    "E4",
+    "E5"
+  ],
+  "cpus": [
+    6,
+    8,
+    10
+  ],
+  "argv": [
+    "/mnt/c/Users/dener_windows11/Repositories/Traffic-Scheduling-with-QoS-in-a-Congested-5G-Base-Station/analysis/experiments.py",
+    "run",
+    "E1",
+    "E2",
+    "E3",
+    "E4",
+    "E5",
+    "--cpus",
+    "6",
+    "8",
+    "10",
+    "--tag",
+    "wsl_20261117"
+  ],
+  "started": "2026-11-17 22:28:52",
+  "warmup_s": 1.0,
+  "tail_s": 0.5,
+  "machine": "Linux-6.18.58.1-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "python": "3.14.4",
+  "numpy": "2.5.5",
+  "pandas": "3.1.1",
+  "binary_sha256": "be80fabac9c4ac4d3ac32249bc4a1b29617a030788f7d98bcf014b260c750e3a",
+  "sources_sha256": {
+    "channel.c": "4a5b74c47809b7d4740b045d013ddf80985e1c6e3bfdb49183dca5539192d6da",
+    "main.c": "057c18674e196f4f796dc9cfae0f59fa74be59d0e76b57b9585c37d6979e0950",
+    "policy.c": "54cc676ad0e8d2c9e2a4745e2de4d51148a75532d2dd04856faca84d7c4f9983",
+    "policy.h": "4dd430b3a531f5023d1f1e9a6c9866506add606e1a95a7478a4b6c32105c8e35",
+    "sim.h": "285be55212e3b6995d3ae874cc7a13f3e1d8e1e905a91f5dbee2c8b8d77173e2",
+    "threads.c": "144692f4715f04df92880100ee1f33c066dbcbd4b99e10698b9cece9181a08f3"
+  },
+  "equal_mean_channels": {
+    "L1": {
+      "distance_m": 160.82,
+      "theory_mean_prbs": 50.0,
+      "sim_mean_prbs": 49.76
+    },
+    "L2": {
+      "distance_m": 210.39,
+      "theory_mean_prbs": 50.0,
+      "sim_mean_prbs": 49.89
+    },
+    "L4": {
+      "distance_m": 265.68,
+      "theory_mean_prbs": 50.0,
+      "sim_mean_prbs": 50.07
+    }
+  }
+}
