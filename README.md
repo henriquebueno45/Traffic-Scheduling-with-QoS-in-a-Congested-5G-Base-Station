@@ -28,6 +28,17 @@ results/                      Outputs (CSV and PNG)
 - A single mutex protects the queues, packets, and policy state.
 - Logs remain in memory and are written only at the end, with no I/O inside the real-time threads.
 
+## Results at a Glance
+
+- Strict priority protects voice and video best: SLA capacity 2.20x on the fixed channel versus 1.50x for FIFO; data is sacrificed first.
+- Four MRC antenna branches raise SLA capacity and reduce seed-to-seed variance (prio: 1.47x with L=1, 1.98x with L=4).
+- Fixed-channel results are deterministic; variability under Rayleigh fading comes from the fading realization of each seed.
+- Short runs (< 10 s, untrimmed) are biased; use 1.0 s warm-up and 0.5 s tail trimming.
+
+Full results, hypothesis verdicts, what the simulator is and is not good for, and limitations: **[results/RESULTS_SUMMARY.md](results/RESULTS_SUMMARY.md)**. Protocol: [results/EXPERIMENTS.md](results/EXPERIMENTS.md).
+
+![SLA capacity by policy and channel](results/exp/E1_capacity.png)
+
 ## Prerequisites
 
 - **Linux/WSL2:** The C core uses Linux/Pthreads APIs and must be built and run inside WSL2 or a native Linux environment. To install WSL2, run `wsl --install -d Ubuntu` from an administrator PowerShell, restart Windows if prompted, and then open Ubuntu.
