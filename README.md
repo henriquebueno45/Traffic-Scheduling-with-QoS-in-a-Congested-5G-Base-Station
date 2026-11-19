@@ -76,7 +76,29 @@ python3 -m analysis.sweep --loads 0.5 1 1.5 2 2.5 --seeds 5 --duration 5 --cpu 2
 python3 -m pytest -q tests
 ```
 
-For real-time measurements on native Linux, set the `performance` governor, run the computer on AC power, and set `ulimit -r` to 95. WSL may not provide the same real-time scheduling or memory-locking guarantees. Without real-time permissions, the core warns and runs without `SCHED_FIFO` (`rt=0` appears on the final status line); those runs should not be treated as real-time measurements.
+## Native Linux Setup for Real-Time Measurements
+
+Do this once per machine (Debian/Ubuntu shown; use `dnf` on Fedora):
+
+```bash
+sudo apt install -y build-essential python3-venv tmux linux-tools-generic   # cpupower
+printf '%s\n' "$USER - rtprio 95" "$USER - memlock unlimited" | sudo tee /etc/security/limits.d/99-rt.conf
+# log out and back in so the limits apply
+```
+
+Before every measurement session, in the same terminal (or `tmux` session) that runs the experiments:
+
+```bash
+ulimit -r                                   # must print 95 or higher
+ulimit -l                                   # must print unlimited
+sudo cpupower frequency-set -g performance
+make -C core
+core/build/gnb_sim --policy prio --load 1.5 --duration 3 --seed 1 --cpu 2 --out /tmp/run.csv | tail -1
+```
+
+The last line must end with `rt=1` and there must be no `memlock` warning. Without real-time permissions, the core warns and runs without `SCHED_FIFO` (`rt=0`); those runs are not valid real-time measurements. WSL may not provide the same guarantees.
+
+While measurements run: keep the machine on AC power and prevent sleep, close browsers, IDEs, VMs, Docker, and sync or update tools, do not use the computer, and keep it cool. Do not mix results from different machines or binary hashes (`results/exp/manifest_*.json` records the hash).
 
 ## Logs
 
@@ -142,8 +164,23 @@ Outputs: `results/edf_{raw,agg}.csv`, `edf_qos.png`, `edf_starvation.png`, and `
 ## Pre-registered Experiments
 
 - Protocol and hypotheses H1–H6: `results/EXPERIMENTS.md`.
-- Run approximately two hours of experiments with `python3 -m analysis.experiments run E1 E2 E3 E4 E5 --cpus 1 2 3`.
-- Generate the report and plots with `python3 -m analysis.exp_report`.
+- Default run (10-20 seeds, approximately two hours on 3 cores): `python3 -m analysis.experiments run E1 E2 E3 E4 E5 --cpus 1 2 3`.
+- Options: `--seeds N` overrides the seed count, `--e1-loads L1 L2 ...` sets the E1 load grid, `--e1-duration S` sets the E1 run length in seconds, `--tag NAME` writes `E*_NAME_raw.csv`, and `--dry` only counts executions. Interrupted runs resume when the same command is repeated. Run time is proportional to total simulated seconds divided by the number of CPUs.
+- The Python driver is pinned to CPUs 0 and 4. Use only other CPUs for `--cpus`, which one job uses per CPU. Use one hardware thread per physical core.
+- Reducing variability: Rayleigh scenarios have high seed-to-seed variance because each seed is a different fading realization, while the fixed channel is deterministic. Use more seeds, a finer E1 load grid, and report quantiles and per-seed paired differences instead of only means.
+
+Generic example (finer E1 grid, 10-s runs, all CPUs except 0 and 4, sleep inhibited):
+
+```bash
+source .venv/bin/activate
+CPUS=$(seq 1 $(($(nproc)-1)) | grep -vx 4 | tr '\n' ' ')
+systemd-inhibit --what=sleep:idle:handle-lid-switch --who=sim --why="experiments" \
+  python3 -m analysis.experiments run E1 --seeds 20 --e1-duration 10 \
+  --e1-loads 1.0 1.2 1.4 1.5 1.55 1.6 1.65 1.7 1.75 1.8 1.85 1.9 1.95 2.0 2.05 2.1 2.2 2.4 \
+  --cpus $CPUS --tag fine10
+```
+
+- Generate the report and plots: `python3 -m analysis.exp_report`. It reads the untagged `results/exp/E*_raw.csv`, so copy the tagged file first (for example `cp results/exp/E1_fine10_raw.csv results/exp/E1_raw.csv`).
 
 ## Assumed Simplifications
 

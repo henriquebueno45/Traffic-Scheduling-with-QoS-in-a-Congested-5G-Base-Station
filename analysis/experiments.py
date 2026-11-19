@@ -77,17 +77,18 @@ def _jobs(exp, scens, policies, loads, seeds, duration, **kw) -> list[Job]:
             for (c, a, d, v) in scens for p in policies for ld in loads for s in seeds]
 
 
-def build_jobs(exp: str, n_seeds: int | None) -> list[Job]:
+def build_jobs(exp: str, n_seeds: int | None, e1_loads: list[float] | None = None,
+               e1_duration: float = 6.0) -> list[Job]:
     d1 = {L: equal_mean_distance(L) for L in (1, 2, 4)}
     fixed = ("fixed", 1, 0.0, 1.5)
     ray = lambda L, v=1.5: ("ray", L, d1[L], v)  # noqa: E731
     seeds = lambda n: range(1, (n_seeds or n) + 1)  # noqa: E731
 
     if exp == "E1":
-        loads = [1.0, 1.2, 1.4, 1.5, 1.6, 1.8, 2.0, 2.2, 2.3, 2.4]
+        loads = e1_loads or [1.0, 1.2, 1.4, 1.5, 1.6, 1.8, 2.0, 2.2, 2.3, 2.4]
         jobs = []
         for pol in POLICIES:
-            jobs += _jobs("E1", [fixed, ray(1), ray(2), ray(4)], [pol], loads, seeds(10), 6.0,
+            jobs += _jobs("E1", [fixed, ray(1), ray(2), ray(4)], [pol], loads, seeds(10), e1_duration,
                           floor_data=FLOOR_DATA_DEFAULT if pol == "prio_floor" else 0)
         return jobs
     if exp == "E2":
@@ -177,7 +178,7 @@ def cmd_run(a: argparse.Namespace) -> None:
     tag = a.tag or "_".join(a.exps)
     write_manifest(tag, a.exps, a.cpus)
     for exp in a.exps:
-        jobs = build_jobs(exp, a.seeds)
+        jobs = build_jobs(exp, a.seeds, a.e1_loads, a.e1_duration)
         csv = OUT / f"{exp}{'_' + a.tag if a.tag else ''}_raw.csv"
         done = set(pd.read_csv(csv, usecols=["job_key"])["job_key"]) if csv.exists() else set()
         todo = [j for j in jobs if j.key() not in done]
@@ -213,6 +214,8 @@ def main() -> None:
     r.add_argument("exps", nargs="+", choices=["E1", "E2", "E3", "E4", "E5"])
     r.add_argument("--cpus", nargs="+", type=int, default=[1, 2, 3])
     r.add_argument("--seeds", type=int, default=None, help="override seed count (pilot)")
+    r.add_argument("--e1-loads", nargs="+", type=float, default=None, help="E1 load grid")
+    r.add_argument("--e1-duration", type=float, default=6.0, help="E1 run length in seconds")
     r.add_argument("--tag", default="", help="output filename suffix (for example: pilot)")
     r.add_argument("--dry", action="store_true", help="count executions only")
     r.set_defaults(fn=cmd_run)
