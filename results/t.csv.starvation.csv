@@ -1,4 +1,0 @@
-class,backlog_slots,starved_slots,max_starve_ms
-voice,1500,0,0.000
-video,1818,0,0.000
-data,2756,792,1.000
