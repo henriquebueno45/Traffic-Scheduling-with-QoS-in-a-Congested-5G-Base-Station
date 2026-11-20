@@ -1,5 +1,5 @@
 /*
- * sim.h - Types and shared state for the gNB emulator.
+ * sim.h - Types and shared state for the gNB scheduler simulator.
  *
  * Simplified model:
  *   - Three traffic classes (voice, video, data), each with its own queue.

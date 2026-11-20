@@ -1,4 +1,13 @@
-# Running the Pre-registered Experiments
+# Running the Experiments
+
+## One-Command Reproduction
+
+```bash
+scripts/reproduce.sh smoke   # build, tests, one short simulation (about 1 min; also run by CI)
+scripts/reproduce.sh full    # regenerate every result in results/ (about 10 h on 6 CPUs)
+```
+
+`full` runs E1 (`fine10`), E2-E5 (`s40`), and E6 (`w30`) with the exact commands behind the committed results, copies the tagged files to `E*_raw.csv`, and regenerates the report and channel validation. It overwrites `results/exp/*`, needs native Linux with at least 6 CPUs, and requires the real-time setup in [SETUP.md](SETUP.md) (`ulimit -r 95`, performance governor). It resumes after an interruption if you repeat the command. Wrap it in `systemd-inhibit --what=sleep:idle` to prevent suspend. The manual per-experiment commands follow.
 
 - Protocol and hypotheses H1–H6: [../results/EXPERIMENTS.md](../results/EXPERIMENTS.md).
 - Default run (10-20 seeds, about 2 hours on 3 cores; the 40-seed set took about 3.6 hours on 6 cores): `python3 -m analysis.experiments run E1 E2 E3 E4 E5 --cpus 1 2 3`.

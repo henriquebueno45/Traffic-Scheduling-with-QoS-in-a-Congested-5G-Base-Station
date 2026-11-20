@@ -1,6 +1,6 @@
 # Experimental Results Summary
 
-Setup and commands: [README](../README.md) and [docs/](../docs/). Protocol and hypotheses: [EXPERIMENTS.md](EXPERIMENTS.md).
+Setup and commands: [README](../README.md) and [docs/](../docs/). Protocol and hypotheses: [EXPERIMENTS.md](EXPERIMENTS.md). Scope: this is a slot-level scheduler simulator, not a full 5G emulator (see the Scope section of the README).
 
 **Data sets:** E1 uses the `fine10` run (20 paired seeds, 25 loads from 0.6 to 2.4, with 0.05 steps near the capacity cliff, 10-s runs, 1.0-9.5 s measurement window). E2-E5 use the `s40` run (40 paired seeds, 6-s runs; 10-20 s for E4/E5). Both: native Linux, 6 measurement CPUs, `SCHED_FIFO`, performance governor, 1-ms slots, baseline capacity 50 PRB/slot. Rayleigh scenarios use equal mean PRBs for L=1, 2, and 4 MRC branches and no shadowing. Files: `results/exp/E*_raw.csv`, `manifest_s40.json`, `manifest_fine10.json`, `verdict.csv`, plots `results/exp/*.png`, quantiles `E1_*_quantiles.csv`.
 
