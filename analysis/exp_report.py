@@ -125,7 +125,7 @@ def report_e1(ver: list) -> None:
                yerr=[s["C_SLA"] - s["lo"], s["hi"] - s["C_SLA"]], capsize=2, label=sc)
     ax.set_xticks(range(len(POLS)), POLS)
     ax.set_ylabel("capacity under SLA (relative load)")
-    ax.set_ylim(1.0, 2.5)
+    ax.set_ylim(0.5, 2.5)
     ax.axhline(1.56, color="gray", lw=0.7, ls="--")
     ax.legend(title="channel (mean 50 PRB)", fontsize=7)
     ax.grid(axis="y", alpha=0.3)
