@@ -20,6 +20,8 @@ systemd-inhibit --what=sleep:idle:handle-lid-switch --who=sim --why="experiments
 
 `python3 -m analysis.exp_report` reads the untagged `results/exp/E*_raw.csv` and writes `*_table.csv`, the `E*_*.png` plots, and `verdict.csv`. Copy a tagged file first, for example `cp results/exp/E1_fine10_raw.csv results/exp/E1_raw.csv`.
 
+E6 (exploratory shadowing experiment, 4,320 runs, about 1.5 h on 6 CPUs, 30 seeds, 18-load grid 0.3-4.0) is run separately: `python3 -m analysis.experiments run E6 --seeds 30 --tag w30 --cpus 1 2 3`, then copy `E6_w30_raw.csv` to `E6_raw.csv` (the committed `E6_raw.csv` is the `w30` run). Its raw CSV has an extra `shadow_db` column.
+
 The committed `E1_raw.csv` is the `fine10` run (20 seeds, 10 s, 0.05 load grid); `E2-E5_raw.csv` are the 40-seed `s40` set. The `manifest_*.json` files record the machine, library versions, and binary hash. Compare results only when the machine and binary hash match.
 
 

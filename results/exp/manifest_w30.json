@@ -1,0 +1,63 @@
+{
+  "tag": "w30",
+  "experiments": [
+    "E6"
+  ],
+  "cpus": [
+    1,
+    2,
+    3,
+    5,
+    6,
+    7
+  ],
+  "argv": [
+    "/home/henrique-morais-linux/Documents/UFSC/Traffic-Scheduling-with-QoS-in-a-Congested-5G-Base-Station/analysis/experiments.py",
+    "run",
+    "E6",
+    "--seeds",
+    "30",
+    "--tag",
+    "w30",
+    "--cpus",
+    "1",
+    "2",
+    "3",
+    "5",
+    "6",
+    "7"
+  ],
+  "started": "2026-11-20 14:03:38",
+  "warmup_s": 1.0,
+  "tail_s": 0.5,
+  "machine": "Linux-7.3.3-200.fc44.x86_64-x86_64-with-glibc2.43",
+  "python": "3.14.10",
+  "numpy": "2.5.5",
+  "pandas": "3.1.1",
+  "binary_sha256": "8e6afc88c624229fcc1d9135356ea1b3b9a2321cdde5674a8e7eb425a9e44f3a",
+  "sources_sha256": {
+    "channel.c": "639186f98bfaecf63feeae2acaf577e8ae46a21cbae521adea55e524a0e87073",
+    "main.c": "05545f786ef82447491f14cab092d1aef8e82253b56e70ab9a204ed8fc3542a4",
+    "policy.c": "b664f6336aa6b720ede2dfb9593097cb1e4e1668be279716e8833885001dee18",
+    "policy.h": "d4ec48020d902f7b9e1dd43426b4f81f55952ba8642957d2dc4f5125e1130524",
+    "sim.h": "ef353042ae8a74d046fe4787f46f93cf36edc9b6602a114c0e280982da626180",
+    "threads.c": "dd3dc626f7d77aa2da4f5d860ab328d566cd090f84b18a89fc5ba29f34b4965f"
+  },
+  "equal_mean_channels": {
+    "L1": {
+      "distance_m": 160.82,
+      "theory_mean_prbs": 50.0,
+      "sim_mean_prbs": 49.76
+    },
+    "L2": {
+      "distance_m": 210.39,
+      "theory_mean_prbs": 50.0,
+      "sim_mean_prbs": 49.89
+    },
+    "L4": {
+      "distance_m": 265.68,
+      "theory_mean_prbs": 50.0,
+      "sim_mean_prbs": 50.07
+    }
+  }
+}

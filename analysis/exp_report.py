@@ -301,13 +301,89 @@ def report_e5(ver: list) -> None:
     fig.savefig(OUT / "E5_speed.png", dpi=150)
 
 
+# ---------------------------------------------------------------- E6 (exploratory)
+def report_e6(ver: list) -> None:
+    """Exploratory (not pre-registered): effect of log-normal shadowing on SLA capacity."""
+    d = load_raw("E6")
+    q = d.pivot_table(index=["scen", "policy", "shadow_db", "seed", "load"], columns="class",
+                      values="qos")
+    q["m"] = q[["voice", "video"]].min(axis=1)
+    rows = []
+    for (sc, pol, sh, seed), g in q.groupby(level=[0, 1, 2, 3]):
+        g = g.reset_index().sort_values("load")
+        cap, st = sla_capacity(g["load"].to_numpy(), g["m"].to_numpy())
+        rows.append({"scen": sc, "policy": pol, "shadow_db": sh, "seed": seed, "cap": cap,
+                     "status": st})
+    cap = pd.DataFrame(rows)
+    # Shadowing changes each trace's mean PRBs, so also report capacity normalised by the mean
+    # PRBs actually offered by that seed's trace (the channel trace is deterministic per seed)
+    from analysis.experiments import TARGET_MEAN_PRBS, equal_mean_distance
+    from channel.channel_model import ChannelConfig, generate_prbs
+    dist = {f"L{L}": equal_mean_distance(L) for L in (1, 4)}
+    mean_prbs = {}
+    for sc, sh, seed in cap[["scen", "shadow_db", "seed"]].drop_duplicates().itertuples(index=False):
+        cfg = ChannelConfig(distance_m=dist[sc], antennas=int(sc[1:]), speed_mps=1.5,
+                            shadow_sigma_db=sh)
+        mean_prbs[(sc, sh, seed)] = float(generate_prbs(6016, cfg, int(seed)).mean())
+    cap["mean_prbs"] = [mean_prbs[(a, b, c)] for a, b, c in zip(cap.scen, cap.shadow_db, cap.seed)]
+    cap["cap_norm"] = cap["cap"] * TARGET_MEAN_PRBS / cap["mean_prbs"]
+    cap.to_csv(OUT / "E6_capacity_per_seed.csv", index=False)
+    summ = []
+    for (sc, pol, sh), g in cap.groupby(["scen", "policy", "shadow_db"]):
+        m, lo, hi = boot_ci(g["cap"])
+        q05, q50, q95 = np.percentile(g["cap"], [5, 50, 95])
+        mn, nlo, nhi = boot_ci(g["cap_norm"])
+        summ.append({"scen": sc, "policy": pol, "shadow_db": sh, "C_SLA": m, "lo": lo, "hi": hi,
+                     "std": g["cap"].std(), "q05": q05, "q50": q50, "q95": q95,
+                     "C_norm": mn, "norm_lo": nlo, "norm_hi": nhi,
+                     "mean_prbs": g["mean_prbs"].mean(), "n": len(g),
+                     "left_censored": int((g["status"] == "left").sum()),
+                     "right_censored": int((g["status"] == "right").sum())})
+    summ = pd.DataFrame(summ)
+    summ.to_csv(OUT / "E6_table.csv", index=False)
+    print("\nE6 (exploratory): capacity under SLA with and without shadowing\n",
+          summ.round(3).to_string(index=False))
+    for col, lab in (("cap", "C_SLA"), ("cap_norm", "C_SLA per mean PRB")):
+        cs = cap.set_index(["policy", "scen", "shadow_db", "seed"])[col]
+        for pol in ("fifo", "prio"):
+            for sc in ("L1", "L4"):
+                m, lo, hi = paired_ci(cs[pol][sc][6.0], cs[pol][sc][0.0])
+                print(f"  paired change in {lab} from shadowing, {pol} {sc}: "
+                      f"{m:+.2f} [{lo:+.2f}; {hi:+.2f}]")
+    cs = cap.set_index(["policy", "scen", "shadow_db", "seed"])["cap_norm"]
+    for sh in (0.0, 6.0):
+        for sc in ("L1", "L4"):
+            m, lo, hi = paired_ci(cs["prio"][sc][sh], cs["fifo"][sc][sh])
+            print(f"  prio - fifo (normalised), {sc}, sigma={sh:g}: {m:+.2f} [{lo:+.2f}; {hi:+.2f}]")
+    for sh in (0.0, 6.0):
+        for pol in ("fifo", "prio"):
+            m, lo, hi = paired_ci(cs[pol]["L4"][sh], cs[pol]["L1"][sh])
+            print(f"  L4 - L1 (normalised), {pol}, sigma={sh:g}: {m:+.2f} [{lo:+.2f}; {hi:+.2f}]")
+
+    fig, axes = plt.subplots(1, 2, figsize=(9, 3.6), sharey=True)
+    for ax, pol in zip(axes, ("fifo", "prio")):
+        data, labels = [], []
+        for sc in ("L1", "L4"):
+            for sh in (0.0, 6.0):
+                data.append(cap[(cap.policy == pol) & (cap.scen == sc)
+                                & (cap.shadow_db == sh)]["cap_norm"].to_numpy())
+                labels.append(f"{sc}\n{int(sh)} dB")
+        ax.boxplot(data, tick_labels=labels, showmeans=True)
+        ax.set_title(f"{pol}: per-seed SLA capacity / mean PRBs")
+        ax.grid(axis="y", alpha=0.3)
+    axes[0].set_ylabel("capacity under SLA (normalised to mean PRBs)")
+    fig.tight_layout()
+    fig.savefig(OUT / "E6_shadowing.png", dpi=150)
+
+
 def main() -> None:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     if hasattr(os, "sched_setaffinity"):
         os.sched_setaffinity(0, {0, 4})
-    exps = sys.argv[1:] or ["E1", "E2", "E3", "E4", "E5"]
-    fns = {"E1": report_e1, "E2": report_e2, "E3": report_e3, "E4": report_e4, "E5": report_e5}
+    exps = sys.argv[1:] or ["E1", "E2", "E3", "E4", "E5", "E6"]
+    fns = {"E1": report_e1, "E2": report_e2, "E3": report_e3, "E4": report_e4, "E5": report_e5,
+           "E6": report_e6}
     ver: list = []
     for e in exps:
         if (OUT / f"{e}_raw.csv").exists():

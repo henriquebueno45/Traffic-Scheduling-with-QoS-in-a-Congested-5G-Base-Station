@@ -68,12 +68,38 @@ An earlier 40-seed, 6-s run on a coarser grid (0.1-0.2 steps) gave capacities wi
 
 Tables: `results/exp/E2_table.csv`, `E3_table.csv`, `E4_table.csv`, `E5_table.csv`.
 
+## E6 (Exploratory): Log-Normal Shadowing
+
+![Shadowing (E6)](exp/E6_shadowing.png)
+
+30 seeds, 6 s, fifo and prio, L=1 and L=4, shadowing sigma 0 vs 6 dB (paired by seed), 18-point load grid from 0.3 to 4.0 so that almost no seed is censored (7 of 240 at the grid edges). Not pre-registered. Capacity is also normalised by each seed's own mean PRBs.
+
+| Scenario | Policy | C_SLA sigma=0 | C_SLA sigma=6 | per-seed std (0 / 6) | Normalised, sigma=6 vs 0 (paired) |
+|---|---|---|---|---|---|
+| L=1 | fifo | 0.79 | 0.94 | 0.16 / 0.58 | +0.08 [0.00, +0.17] |
+| L=1 | prio | 1.48 | 1.61 | 0.21 / 0.94 | -0.03 [-0.16, +0.09] |
+| L=4 | fifo | 1.26 | 1.32 | 0.06 / 0.69 | -0.03 [-0.10, +0.03] |
+| L=4 | prio | 2.00 | 2.01 | 0.05 / 0.98 | -0.11 [-0.19, -0.04] |
+
+- Shadowing leaves the mean capacity statistically unchanged (raw paired changes all include zero) but multiplies the per-seed spread by 4-20x: one seed is one cell-edge position, and per-seed prio capacity ranges from about 0.3 to 3.2 at sigma=6.
+- Normalised by mean PRBs, the policy and diversity gains survive shadowing: prio - fifo is +0.58 [0.48, 0.67] (L=1) and +0.66 [0.60, 0.72] (L=4); L4 - L1 is +0.36 [0.29, 0.43] (fifo) and +0.44 [0.33, 0.55] (prio). The diversity gain shrinks slightly with shadowing (0.47 to 0.36 for fifo, 0.51 to 0.44 for prio).
+- Practical reading: scheduling and diversity conclusions hold under shadowing, but any single cell position gives a very different capacity, so capacity claims need many seeds or per-position reporting.
+- The wide grid also showed that fifo at L=1 has capacity 0.79 at sigma=0, below the 1.0 lower edge of the E1 grid (see Known Limitations).
+
+## Channel Validation
+
+`python -m analysis.validate_channel` checks the channel model against theory (`results/outage_validation.png`, `channel_validation.png`):
+
+- Outage CDF matches Gamma(L,1) within 0.02 decades of log10 for P > 1e-3 (L=1, 2, 4).
+- Log-log outage slope over the sampled range matches theory (L=4: 3.52 vs 3.51). The asymptotic diversity order L needs tails too small to sample.
+- Level-crossing rate (5 m/s, 0.05 ms resolution) matches Clarke theory within 2% for rho 0.1-1.0.
+
 ## Hypothesis Verdicts
 
 | Hypothesis | Verdict | Result |
 |---|---|---|
 | H1 Diversity | Supported | L=4 raises SLA capacity for all policies at equal mean PRBs. |
-| H2 Policy vs diversity | Inconclusive | Policy gain (+0.46) exceeds diversity gain (+0.25); difference +0.21 [0.15, 0.28]. |
+| H2 Policy vs diversity | Inconclusive | Policy gain (+0.40) exceeds diversity gain (+0.24); difference +0.16 [0.08, 0.24]. |
 | H3 Minimum floor | Refuted | A 1-2 PRB floor cuts data starvation from up to 525 ms to 3 ms in L=1, but not to <= 1 ms, and costs video QoS (-0.063 at floor 1, 2.0x). Fixed channel: no effect on voice/video and starvation eliminated. |
 | H4 Staggered bursts | Supported | No policy-order change for K=1..20. At 1.8x only prio and dwrr keep voice QoS 1.0; fifo is 0. |
 | H5 Fading vs deadline | Supported | Voice QoS +0.030 [0.025, 0.035] from 0.3 to 30 m/s (prio, 1.5x, L=1). |
@@ -108,3 +134,4 @@ Produced by `analysis.sweep`, `analysis.inversion`, `analysis.producers`, `analy
 - Shadowing is a single static draw per execution (disabled in E1-E5); channel sweeps model one representative user.
 - The fluid analytical model assumes average data rates.
 - E1 capacity is resolved to the 0.05 load step; E1 has 20 seeds, so L=1 intervals remain wide (about 0.15).
+- E1 left-censoring: the E1 load grid starts at 1.0, so L=1 `fifo` (18 of 20 seeds) and `dwrr` (20 of 20) capacities of 1.00 are lower bounds, and L=2 `fifo`/`dwrr` are partly censored. E6 (grid from 0.3) puts L=1 `fifo` at 0.79 [0.73, 0.84], so the E1 diversity gain for `fifo` (+0.24) is underestimated (E6: +0.47 [0.41, 0.53]). The H1 verdict is conservative, but the H2 policy-vs-diversity difference is biased toward the policy and should be re-evaluated with an E1 grid that extends below 1.0.

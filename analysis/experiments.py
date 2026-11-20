@@ -1,10 +1,11 @@
-"""Run experiments E1 through E5 from the protocol (results/EXPERIMENTS.md).
+"""Run experiments E1 through E6 from the protocol (results/EXPERIMENTS.md).
 
     E1  SLA capacity: fixed/Rayleigh L=1/2/4 channels with equal mean x policy x load  (H1, H2)
     E2  minimum floor (prio_floor) under overload                                   (H3)
     E3  staggered bursts (--stagger K)                                              (H4)
     E4  truncation bias: 4 s without trim x 20 s with warm-up/tail                 (H6)
     E5  coherence-time speed x deadline, Rayleigh L=1                              (H5)
+    E6  exploratory (not pre-registered): log-normal shadowing sigma 0 versus 6 dB, L=1/4
 
 Each core execution is independent and runs on a separate CPU. Choose CPUs from distinct
 physical cores (`lscpu -e`). Output is incremental and resumable.
@@ -41,6 +42,8 @@ OUT = ROOT / "results" / "exp"
 WARMUP_S, TAIL_S = 1.0, 0.5
 TARGET_MEAN_PRBS = 50.0
 POLICIES = ["fifo", "prio", "edf", "dwrr", "prio_floor"]
+# Wide grid: with 6 dB shadowing the per-seed capacity spans roughly 0.3x to 3x nominal
+E6_LOADS = [0.3, 0.5, 0.7, 0.9, 1.0, 1.2, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0, 2.2, 2.4, 2.8, 3.2, 4.0]
 FLOOR_DATA_DEFAULT = 2  # Floor used when prio_floor appears in E1
 
 
@@ -63,9 +66,14 @@ class Job:
     stagger: int = 1
     floor_video: int = 0
     floor_data: int = 0
+    shadow_db: float = 0.0
 
     def key(self) -> str:
-        return "|".join(str(v) for v in asdict(self).values())
+        # shadow_db is omitted at 0 so keys of E1-E5 stay unchanged
+        d = asdict(self)
+        if not d["shadow_db"]:
+            del d["shadow_db"]
+        return "|".join(str(v) for v in d.values())
 
     @property
     def scen(self) -> str:
@@ -109,6 +117,13 @@ def build_jobs(exp: str, n_seeds: int | None, e1_loads: list[float] | None = Non
     if exp == "E5":
         return _jobs("E5", [ray(1, v) for v in (0.3, 1.5, 5.0, 15.0, 30.0)], ["fifo", "prio"],
                      [1.3, 1.5], seeds(20), 10.0)
+    if exp == "E6":
+        jobs = []
+        for sigma in (0.0, 6.0):
+            for pol in ("fifo", "prio"):
+                jobs += _jobs("E6", [ray(1), ray(4)], [pol], E6_LOADS, seeds(30), 6.0,
+                              shadow_db=sigma)
+        return jobs
     raise SystemExit(f"unknown experiment: {exp}")
 
 
@@ -122,7 +137,7 @@ def run_job(job: Job, cpu: int, workdir: Path) -> pd.DataFrame:
            "--floor-data", str(job.floor_data)]
     if job.chan == "ray":
         cfg = ChannelConfig(distance_m=job.distance, antennas=job.antennas,
-                            speed_mps=job.speed, shadow_sigma_db=0.0)
+                            speed_mps=job.speed, shadow_sigma_db=job.shadow_db)
         prbs = generate_prbs(int(job.duration * 1000) + 16, cfg, job.seed)
         trace = workdir / "trace.csv"
         trace.write_text("slot,prbs\n" + "".join(f"{i},{p}\n" for i, p in enumerate(prbs)))
@@ -140,10 +155,11 @@ def run_job(job: Job, cpu: int, workdir: Path) -> pd.DataFrame:
         df[k] = v
     df["scen"] = job.scen
     df["job_key"] = job.key()
-    return df[["job_key", "exp", "scen", "chan", "antennas", "distance", "speed", "policy", "load",
+    cols = ["job_key", "exp", "scen", "chan", "antennas", "distance", "speed", "policy", "load",
                "seed", "duration", "stagger", "floor_video", "floor_data", "trim", "class",
                "offered", "delivered", "qos", "delivery_rate", "delay_mean_ms", "delay_p95_ms",
-               "throughput_prb_s", "starved_frac", "max_starve_ms"]]
+               "throughput_prb_s", "starved_frac", "max_starve_ms"]
+    return df[cols + (["shadow_db"] if job.exp == "E6" else [])]
 
 
 def sha256(path: Path) -> str:
@@ -211,7 +227,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("run")
-    r.add_argument("exps", nargs="+", choices=["E1", "E2", "E3", "E4", "E5"])
+    r.add_argument("exps", nargs="+", choices=["E1", "E2", "E3", "E4", "E5", "E6"])
     r.add_argument("--cpus", nargs="+", type=int, default=[1, 2, 3])
     r.add_argument("--seeds", type=int, default=None, help="override seed count (pilot)")
     r.add_argument("--e1-loads", nargs="+", type=float, default=None, help="E1 load grid")
