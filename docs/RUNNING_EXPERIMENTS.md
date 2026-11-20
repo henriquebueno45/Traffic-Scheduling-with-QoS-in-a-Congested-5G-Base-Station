@@ -10,18 +10,17 @@ Generic example (finer E1 grid, 10-s runs, all CPUs except 0 and 4, sleep inhibi
 
 ```bash
 source .venv/bin/activate   # or: source venv/bin/activate
-CPUS=$(seq 1 $(($(nproc)-1)) | grep -vx 4 | tr '\n' ' ')
 systemd-inhibit --what=sleep:idle:handle-lid-switch --who=sim --why="experiments" \
   python3 -m analysis.experiments run E1 --seeds 20 --e1-duration 10 \
   --e1-loads 1.0 1.2 1.4 1.5 1.55 1.6 1.65 1.7 1.75 1.8 1.85 1.9 1.95 2.0 2.05 2.1 2.2 2.4 \
-  --cpus $CPUS --tag fine10
+  --cpus $(seq 1 $(($(nproc)-1)) | grep -vx 4) --tag fine10
 ```
 
 ## Generating the Report
 
 `python3 -m analysis.exp_report` reads the untagged `results/exp/E*_raw.csv` and writes `*_table.csv`, the `E*_*.png` plots, and `verdict.csv`. Copy a tagged file first, for example `cp results/exp/E1_fine10_raw.csv results/exp/E1_raw.csv`.
 
-The committed `E*_raw.csv` files are the 40-seed (`s40`) set; `manifest_s40.json` records the machine, library versions, and binary hash. Compare results only when the machine and binary hash match.
+The committed `E1_raw.csv` is the `fine10` run (20 seeds, 10 s, 0.05 load grid); `E2-E5_raw.csv` are the 40-seed `s40` set. The `manifest_*.json` files record the machine, library versions, and binary hash. Compare results only when the machine and binary hash match.
 
 
 ## Command Reference

@@ -6,8 +6,8 @@ Course project for Concurrency and Real-Time Systems and Wireless Communications
 
 ## Results at a Glance
 
-- Strict priority protects voice and video best: SLA capacity 2.20x on the fixed channel versus 1.50x for FIFO; data is sacrificed first.
-- Four MRC antenna branches raise SLA capacity and reduce seed-to-seed variance (prio: 1.47x with L=1, 1.98x with L=4).
+- Strict priority protects voice and video best: SLA capacity 2.20x on the fixed channel versus 1.49x for FIFO; data is sacrificed first.
+- Four MRC antenna branches raise SLA capacity and reduce seed-to-seed variance (prio: 1.40x with L=1, 2.03x with L=4).
 - The fixed channel is deterministic; variability under Rayleigh fading comes from each seed's fading realization.
 - Short runs (< 10 s, untrimmed) are biased; use 1.0 s warm-up and 0.5 s tail trimming.
 
