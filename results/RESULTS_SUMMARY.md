@@ -2,7 +2,7 @@
 
 Setup and commands: [README](../README.md) and [docs/](../docs/). Protocol and hypotheses: [EXPERIMENTS.md](EXPERIMENTS.md).
 
-**Data sets:** E1 uses the `fine10` run (20 paired seeds, 18 loads with 0.05 steps near the capacity cliff, 10-s runs, 1.0-9.5 s measurement window). E2-E5 use the `s40` run (40 paired seeds, 6-s runs; 10-20 s for E4/E5). Both: native Linux, 6 measurement CPUs, `SCHED_FIFO`, performance governor, 1-ms slots, baseline capacity 50 PRB/slot. Rayleigh scenarios use equal mean PRBs for L=1, 2, and 4 MRC branches and no shadowing. Files: `results/exp/E*_raw.csv`, `manifest_s40.json`, `manifest_fine10.json`, `verdict.csv`, plots `results/exp/*.png`, quantiles `E1_*_quantiles.csv`.
+**Data sets:** E1 uses the `fine10` run (20 paired seeds, 25 loads from 0.6 to 2.4, with 0.05 steps near the capacity cliff, 10-s runs, 1.0-9.5 s measurement window). E2-E5 use the `s40` run (40 paired seeds, 6-s runs; 10-20 s for E4/E5). Both: native Linux, 6 measurement CPUs, `SCHED_FIFO`, performance governor, 1-ms slots, baseline capacity 50 PRB/slot. Rayleigh scenarios use equal mean PRBs for L=1, 2, and 4 MRC branches and no shadowing. Files: `results/exp/E*_raw.csv`, `manifest_s40.json`, `manifest_fine10.json`, `verdict.csv`, plots `results/exp/*.png`, quantiles `E1_*_quantiles.csv`.
 
 ## Traffic Model
 
@@ -36,16 +36,16 @@ SLA capacity = largest load where voice QoS >= 0.99 and video QoS >= 0.99 (mean,
 | Channel | fifo | dwrr | edf | prio | prio_floor |
 |---|---|---|---|---|---|
 | Fixed 50 PRB | 1.49 | 1.65 | 1.55 | **2.20** | 2.10 |
-| Rayleigh L=1 | 1.00 | 1.00 | 1.43 | **1.40** [1.33, 1.48] | 1.28 |
+| Rayleigh L=1 | 0.77 | 0.79 | 1.44 | **1.41** [1.33, 1.48] | 1.29 |
 | Rayleigh L=2 | 1.07 | 1.12 | 1.54 | **1.78** [1.73, 1.83] | 1.68 |
-| Rayleigh L=4 | 1.24 | 1.55 | 1.56 | **2.03** [2.01, 2.05] | 1.93 |
+| Rayleigh L=4 | 1.29 | 1.55 | 1.56 | **2.03** [2.01, 2.05] | 1.93 |
 
 An earlier 40-seed, 6-s run on a coarser grid (0.1-0.2 steps) gave capacities within the same confidence intervals but quantized to the grid (for example fixed `prio_floor` 2.00 versus 2.10 here); the finer grid is the reference.
 
 - **Strict priority is the best policy for voice/video**, keeping voice QoS at 0.98 or higher through 2.4x in every channel (1.0 for fixed and L=4), but video collapses near 2.4x and data is sacrificed first.
 - **FIFO collapses abruptly:** voice QoS drops from about 1.0 at 1.4x to near 0 at 1.6x (fixed channel).
-- **Diversity helps:** going from L=1 to L=4 raises SLA capacity for every policy (H1; for example prio +0.62 [0.55, 0.69]).
-- **Strict priority matters more than diversity** for capacity gain (+0.40 vs +0.24 for FIFO L=4 vs L=1), but H2 is formally inconclusive.
+- **Diversity helps:** going from L=1 to L=4 raises SLA capacity for every policy (H1; prio +0.62 [0.55, 0.70], fifo +0.52 [0.46, 0.58], dwrr +0.76 [0.71, 0.81]).
+- **Strict priority matters more than diversity** for capacity gain (+0.64 prio vs FIFO, against +0.52 for FIFO L=4 vs L=1; difference +0.12 [0.03, 0.20]), but H2 is formally inconclusive because the rule is descriptive and the two gains are of similar size.
 
 ![SLA capacity](exp/E1_capacity.png)
 
@@ -54,9 +54,9 @@ An earlier 40-seed, 6-s run on a coarser grid (0.1-0.2 steps) gave capacities wi
 ### Variability: Where It Comes From
 
 - Fixed channel: zero seed-to-seed variance (capacity std 0.00 for prio and dwrr), so scheduler and machine jitter are negligible.
-- Rayleigh channel: all variance comes from the fading realization of each seed. Per-seed `prio` capacity std is 0.23 (L=1), 0.12 (L=2), and 0.05 (L=4), so diversity also reduces variance.
-- Example, video QoS under prio at 2.0x: L=1 median 0.81 (5%-95%: 0.62-0.94); L=4 median 0.99 (0.97-1.00).
-- QoS is nearly binary near the SLA cliff, so means have large spread there; use the quantile tables and per-seed paired differences. Longer (10-s) runs and a finer grid did not shrink the confidence intervals (L=1 `prio` CI width 0.14 versus 0.12 with 40 seeds), which shows that the variance is intrinsic to the fading realization, not to run length. More seeds are the only way to narrow the intervals; paired differences and quantiles are the appropriate summaries.
+- Rayleigh channel: all variance comes from the fading realization of each seed. Per-seed `prio` capacity std is 0.17 (L=1), 0.12 (L=2), and 0.04 (L=4), so diversity also reduces variance.
+- Example, video QoS under prio at 2.0x: L=1 median 0.81 (5%-95%: 0.72-0.89); L=4 median 0.99 (0.99-1.00).
+- QoS is nearly binary near the SLA cliff, so means have large spread there; use the quantile tables and per-seed paired differences. Longer (10-s) runs and a finer grid did not shrink the confidence intervals (L=1 `prio` CI width 0.15 versus 0.12 with 40 seeds), which shows that the variance is intrinsic to the fading realization, not to run length. More seeds are the only way to narrow the intervals; paired differences and quantiles are the appropriate summaries.
 
 ## E2-E5: Floor, Bursts, Speed, Truncation
 
@@ -99,7 +99,7 @@ Tables: `results/exp/E2_table.csv`, `E3_table.csv`, `E4_table.csv`, `E5_table.cs
 | Hypothesis | Verdict | Result |
 |---|---|---|
 | H1 Diversity | Supported | L=4 raises SLA capacity for all policies at equal mean PRBs. |
-| H2 Policy vs diversity | Inconclusive | Policy gain (+0.40) exceeds diversity gain (+0.24); difference +0.16 [0.08, 0.24]. |
+| H2 Policy vs diversity | Inconclusive | Policy gain (+0.64) exceeds diversity gain (+0.52); difference +0.12 [0.03, 0.20]. |
 | H3 Minimum floor | Refuted | A 1-2 PRB floor cuts data starvation from up to 525 ms to 3 ms in L=1, but not to <= 1 ms, and costs video QoS (-0.063 at floor 1, 2.0x). Fixed channel: no effect on voice/video and starvation eliminated. |
 | H4 Staggered bursts | Supported | No policy-order change for K=1..20. At 1.8x only prio and dwrr keep voice QoS 1.0; fifo is 0. |
 | H5 Fading vs deadline | Supported | Voice QoS +0.030 [0.025, 0.035] from 0.3 to 30 m/s (prio, 1.5x, L=1). |
@@ -133,5 +133,5 @@ Produced by `analysis.sweep`, `analysis.inversion`, `analysis.producers`, `analy
 - Synchronous bursts are the worst case; no fragmentation, HARQ, or discrete MCS.
 - Shadowing is a single static draw per execution (disabled in E1-E5); channel sweeps model one representative user.
 - The fluid analytical model assumes average data rates.
-- E1 capacity is resolved to the 0.05 load step; E1 has 20 seeds, so L=1 intervals remain wide (about 0.15).
-- E1 left-censoring: the E1 load grid starts at 1.0, so L=1 `fifo` (18 of 20 seeds) and `dwrr` (20 of 20) capacities of 1.00 are lower bounds, and L=2 `fifo`/`dwrr` are partly censored. E6 (grid from 0.3) puts L=1 `fifo` at 0.79 [0.73, 0.84], so the E1 diversity gain for `fifo` (+0.24) is underestimated (E6: +0.47 [0.41, 0.53]). The H1 verdict is conservative, but the H2 policy-vs-diversity difference is biased toward the policy and should be re-evaluated with an E1 grid that extends below 1.0.
+- E1 capacity is resolved to the 0.05 load step (0.1 below 1.5); E1 has 20 seeds, so L=1 intervals remain wide (about 0.1-0.15). Only 3 of 40 L=1 seeds for `fifo`/`dwrr` are still censored at the 0.6 lower edge.
+- E1 grid history: an earlier E1 grid started at 1.0 and left-censored L=1 `fifo`/`dwrr` (capacity reported as 1.00). The grid was extended down to 0.6 (L=1 `fifo` 0.77, `dwrr` 0.79), which raised the `fifo` diversity gain from +0.24 to +0.52 and narrowed the H2 policy-vs-diversity gap from +0.40 vs +0.24 to +0.64 vs +0.52. E6 independently gives L=1 `fifo` 0.79.

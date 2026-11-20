@@ -30,8 +30,8 @@ Results from the `fine10` (E1) and `s40` (E2-E5) data sets; regenerate with `pyt
 
 | Hypothesis | Verdict | Result |
 |---|---|---|
-| H1 | Supported | At equal mean PRB, L=4 increased SLA capacity for every policy (prio +0.62 [0.55, 0.69]). |
-| H2 | Inconclusive | Policy gain (prio - fifo, +0.40) exceeded diversity gain (L=4 - L=1 for fifo, +0.24); difference +0.16 [0.08, 0.24]. |
+| H1 | Supported | At equal mean PRB, L=4 increased SLA capacity for every policy (prio +0.62 [0.55, 0.70]). |
+| H2 | Inconclusive | Policy gain (prio - fifo, +0.64) exceeded diversity gain (L=4 - L=1 for fifo, +0.52); difference +0.12 [0.03, 0.20]. |
 | H3 | Refuted | The floor eliminated fixed-channel starvation, but under Rayleigh fading data starvation stayed above 1 ms (3 ms) and video QoS fell (up to -0.147 at floor 2, 2.0x). |
 | H4 | Supported | No significant policy-order change with staggering. |
 | H5 | Supported | Voice QoS +0.030 [0.025, 0.035] from 0.3 to 30 m/s. |

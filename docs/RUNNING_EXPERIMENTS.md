@@ -12,7 +12,7 @@ Generic example (finer E1 grid, 10-s runs, all CPUs except 0 and 4, sleep inhibi
 source .venv/bin/activate   # or: source venv/bin/activate
 systemd-inhibit --what=sleep:idle:handle-lid-switch --who=sim --why="experiments" \
   python3 -m analysis.experiments run E1 --seeds 20 --e1-duration 10 \
-  --e1-loads 1.0 1.2 1.4 1.5 1.55 1.6 1.65 1.7 1.75 1.8 1.85 1.9 1.95 2.0 2.05 2.1 2.2 2.4 \
+  --e1-loads 0.6 0.7 0.8 0.9 0.95 1.0 1.1 1.2 1.3 1.4 1.5 1.55 1.6 1.65 1.7 1.75 1.8 1.85 1.9 1.95 2.0 2.05 2.1 2.2 2.4 \
   --cpus $(seq 1 $(($(nproc)-1)) | grep -vx 4) --tag fine10
 ```
 
@@ -22,7 +22,7 @@ systemd-inhibit --what=sleep:idle:handle-lid-switch --who=sim --why="experiments
 
 E6 (exploratory shadowing experiment, 4,320 runs, about 1.5 h on 6 CPUs, 30 seeds, 18-load grid 0.3-4.0) is run separately: `python3 -m analysis.experiments run E6 --seeds 30 --tag w30 --cpus 1 2 3`, then copy `E6_w30_raw.csv` to `E6_raw.csv` (the committed `E6_raw.csv` is the `w30` run). Its raw CSV has an extra `shadow_db` column.
 
-The committed `E1_raw.csv` is the `fine10` run (20 seeds, 10 s, 0.05 load grid); `E2-E5_raw.csv` are the 40-seed `s40` set. The `manifest_*.json` files record the machine, library versions, and binary hash. Compare results only when the machine and binary hash match.
+The committed `E1_raw.csv` is the `fine10` run (20 seeds, 10 s, 25-point load grid from 0.6 to 2.4); `E2-E5_raw.csv` are the 40-seed `s40` set. The `manifest_*.json` files record the machine, library versions, and binary hash. Compare results only when the machine and binary hash match.
 
 
 ## Command Reference
